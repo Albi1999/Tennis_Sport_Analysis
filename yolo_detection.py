@@ -9,7 +9,13 @@ model = YOLO('models/yolo11best.pt')
 input = 'data/input_video2.mp4'
 
 # Perform prediction
-model.predict(input, save=True)
+model.predict(input,
+              conf= 0.10, # low confidence as we only are tracking the one ball (we assume not a lot
+                          # of other things in the video will be detected as the ball)
+              project = 'output/output_video2.mp4',
+              max_det = 1, # only one ball, so we only want to detect one thing at a time
+              show = True, # show every frame during processing 
+              save=True) # save video
 
 
 
