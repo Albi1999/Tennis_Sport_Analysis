@@ -17,17 +17,16 @@ input = 'data/input_video2.mp4'
 
 
 # Perform prediction (on ball)
-model.predict(input,
+results = model.predict(input,
               conf= 0.10, # low confidence as we only are tracking the one ball (we assume not a lot
                           # of other things in the video will be detected as the ball)
               project = 'output/output_video2.mp4',
               max_det = 1, # only one ball, so we only want to detect one thing at a time
-              show = True, # show every frame during processing 
               save=True) # save video
 
 
+print(results)
 
-# result = model.predict(...) followed by print(result) to get some useful informations
 
 
 
