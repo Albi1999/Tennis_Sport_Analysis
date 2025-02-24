@@ -15,6 +15,7 @@ def download_clip(url, start, end):
         "yt-dlp",
         "--download-sections", f"*{start}-{end}",
         "--format", "bv*[height<=720]",
+        "-S vcodec:h264,res,acodec:m4a",
         url
     ]
     subprocess.run(command)
@@ -23,9 +24,9 @@ def download_clip(url, start, end):
 
 
 def main():
-    url = 'https://www.youtube.com/watch?v=2L06HxxP1jM&ab_channel=Wimbledon'
-    start = '01:08:02'
-    end = '01:08:07'
+    url = 'https://www.youtube.com/watch?v=5uFAkizQNJI&ab_channel=Wimbledon'
+    start = '00:00:00'
+    end = '00:00:08'
     download_clip(url, start, end)
 
 

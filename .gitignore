@@ -5,3 +5,8 @@ output/output_video2.mp4/predict/input_video2.mp4
 output/output_video2.mp4/predict2/input_video2.mp4
 
 data/keypoint_detection/data
+output/output_video1.mp4
+output/output_video3.mp4
+output/output_video4.mp4
+data/input_video4.mp4
+data/input_video3.mp4

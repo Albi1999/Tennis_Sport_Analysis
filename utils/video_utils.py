@@ -1,7 +1,7 @@
 import cv2 
 from tqdm import tqdm 
 
-def read_video(video_path):
+def read_video(video_path): # TODO : read in fps I think so we can reuse 
     """ 
     Read a video, frame by frame.
     
@@ -13,6 +13,7 @@ def read_video(video_path):
     """
 
     cap = cv2.VideoCapture(video_path)
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     frames = []
 
@@ -28,11 +29,11 @@ def read_video(video_path):
     # Releasing the capture object (no frames left)
     cap.release()
 
-    return frames
+    return frames, fps 
 
 
 
-def save_video(output_video_frames, output_video_path):
+def save_video(output_video_frames, output_video_path, fps):
 
     # Get shape of frames (since same video, just look at the first frame)
     height, width = output_video_frames[0].shape[0], output_video_frames[0].shape[1]
@@ -40,8 +41,8 @@ def save_video(output_video_frames, output_video_path):
     # Set compression method 
     compression_method = cv2.VideoWriter_fourcc(*'mp4v') # instead of MJPG compression
 
-    # Compress each frame, use fps = 60
-    out = cv2.VideoWriter(output_video_path, compression_method, 60, (width, height))
+    # Compress each frame
+    out = cv2.VideoWriter(output_video_path, compression_method, fps, (width, height))
 
     # Process each frame 
     for frame in tqdm(output_video_frames):
