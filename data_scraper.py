@@ -20,17 +20,11 @@ def download_clip(url, start, end):
     ]
     subprocess.run(command)
 
-
-
-
 def main():
-    url = 'https://www.youtube.com/watch?v=5uFAkizQNJI&ab_channel=Wimbledon'
-    start = '00:00:00'
-    end = '00:00:08'
+    url = 'https://youtu.be/U7uhxZF7oQM?si=yhpZCEhCeJhtdecf'
+    start = '00:31:43'
+    end = '00:32:04'
     download_clip(url, start, end)
-
 
 if __name__ == '__main__':
     main()
-
-
