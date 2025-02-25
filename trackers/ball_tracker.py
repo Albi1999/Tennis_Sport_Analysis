@@ -49,7 +49,7 @@ class BallTracker:
         """
         ball_detections = []
 
-        # Load stored detected player informations
+        # Load stored detected ball informations
         if stub_path is not None and read_from_stub:
             with open(stub_path, 'rb') as f:
                 ball_detections = pickle.load(f)
@@ -59,7 +59,7 @@ class BallTracker:
             ball_dict = self.detect_frame(frame)
             ball_detections.append(ball_dict)
 
-        # Store detected player information
+        # Store detected ball information
         if stub_path is not None: 
             with open(stub_path, 'wb') as f:
                 pickle.dump(ball_detections, f)
@@ -69,7 +69,7 @@ class BallTracker:
     
     def detect_frame(self, frame):
         """
-        Frame by frame, detect the players and track them
+        Frame by frame, detect the ball and track them
 
         Args:
             frame : the frame to be analyzed 
@@ -100,7 +100,7 @@ class BallTracker:
 
     def draw_bboxes(self, video_frames, ball_detections):
         """
-        Draw bounding boxes as well as IDs for the players.
+        Draw bounding box for the ball.
 
         Args:
             video_frames : List of all the frames of the video.
@@ -108,7 +108,7 @@ class BallTracker:
         
         Returns:
             output_video_frames : Frames of the video, now annotated
-                                  with bounding boxes & IDs for Players.
+                                  with bounding boxe for ball.
         
         
         """

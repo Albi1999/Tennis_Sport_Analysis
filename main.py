@@ -11,18 +11,28 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    video_number = 4
+    video_number = 2
     input_video_path = f'data/input_video{video_number}.mp4'
     output_video_path = f'output/output_video{video_number}.mp4'
 
     # Initialize Tracker for Players & Ball
     player_tracker = PlayerTracker(model_path = 'models/yolov8x.pt')
-    ball_tracker = BallTracker(model_path = 'models/yolo11best.pt') # TODO : try yolo11last aswell as finetuning on more self annotated data (retrain model)
-    ball_tracker_TRACKNET = BallTrackerNet()
-    ball_tracker_TRACKNET.load_state_dict(torch.load('models/tracknet_best.pt', map_location= device))
-    ball_tracker_TRACKNET.to(device)
-    ball_tracker_TRACKNET.eval()
-
+    ball_tracker_method = 'yolo' # 'yolo' or 'tracknet'
+    
+    if ball_tracker_method == 'yolo':
+        ball_tracker = BallTracker(model_path = 'models/yolo11best.pt') # TODO : try yolo11last aswell as finetuning on more self annotated data (retrain model)
+    elif ball_tracker_method == 'tracknet':
+        ball_tracker_TRACKNET = BallTrackerNet()
+        ball_tracker_TRACKNET.load_state_dict(torch.load('models/tracknet_best.pt', map_location= device))
+        ball_tracker_TRACKNET.to(device)
+        ball_tracker_TRACKNET.eval()
+        
+    # TODO: ADD THE TRACKNET MODEL + YOLO MODEL    
+    # elif ball_tracker_method == 'both':
+        
+    else:
+        raise ValueError("Specify a valid ball tracker method ('yolo' or 'tracknet')")
+    
     courtline_detector = CourtLineDetector(model_path = 'models/keypoints_model.pth') # TODO : add the postprocessing from this github : https://github.com/yastrebksv/TennisCourtDetector
     
 
@@ -31,24 +41,25 @@ def main():
 
     # Detect & Track Players
     player_detections = player_tracker.detect_frames(video_frames,
-                                                     read_from_stub = True,
+                                                     read_from_stub = False,
                                                      stub_path = 'tracker_stubs/player_detections.pkl')
     
     # Detect Ball 
-#    ball_detections = ball_tracker.detect_frames(video_frames,
-#                                                 read_from_stub = True,
-#                                                 stub_path = 'tracker_stubs/ball_detections.pkl')
-    
-    # Interpolate the missing tracking positions for the ball
- #   ball_detections = ball_tracker.interpolate_ball_positions(ball_detections)
-
-    ball_detections, dists = infer_model(video_frames, ball_tracker_TRACKNET)
-    ball_detections = remove_outliers(ball_detections, dists)
-    subtracks = split_track(ball_detections)
-    for r in subtracks:
-        ball_subtrack = ball_detections[r[0]:r[1]]
-        ball_subtrack = interpolation(ball_subtrack)
-        ball_detections[r[0]:r[1]] = ball_subtrack
+    if ball_tracker_method == 'yolo':
+        ball_detections = ball_tracker.detect_frames(video_frames,
+                                                 read_from_stub = True,
+                                                 stub_path = 'tracker_stubs/ball_detections.pkl')
+        # Interpolate the missing tracking positions for the ball
+        ball_detections = ball_tracker.interpolate_ball_positions(ball_detections)
+        
+    elif ball_tracker_method == 'tracknet':
+        ball_detections, dists = infer_model(video_frames, ball_tracker_TRACKNET)
+        ball_detections = remove_outliers(ball_detections, dists)
+        subtracks = split_track(ball_detections)
+        for r in subtracks:
+            ball_subtrack = ball_detections[r[0]:r[1]]
+            ball_subtrack = interpolation(ball_subtrack)
+            ball_detections[r[0]:r[1]] = ball_subtrack
 
 
 
@@ -67,10 +78,11 @@ def main():
     output_frames = player_tracker.draw_bboxes(video_frames, player_detections)
 
     # Draw bounding box around ball
-   # output_frames = ball_tracker.draw_bboxes(output_frames, ball_detections)
-    output_frames = write_track(output_frames, ball_detections)
+    if ball_tracker_method == 'yolo':
+        output_frames = ball_tracker.draw_bboxes(output_frames, ball_detections)
+    elif ball_tracker_method == 'tracknet':
+        output_frames = write_track(output_frames, ball_detections)
     
-
     # Draw keypoints, according to the first frame
     output_frames = courtline_detector.draw_keypoints_on_video(output_frames, courtline_keypoints)
 
