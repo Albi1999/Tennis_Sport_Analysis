@@ -1,6 +1,6 @@
 from utils import (read_video, save_video, postprocess, infer_model, remove_outliers, split_track, interpolation, write_track)
 from trackers import (PlayerTracker, BallTracker,BallTrackerNet)
-
+from mini_court import MiniCourt
 from court_line_detector import CourtLineDetector
 import cv2 
 import torch 
@@ -70,6 +70,10 @@ def main():
     # Filter players
     player_detections = player_tracker.choose_and_filter_players(courtline_keypoints, player_detections)
 
+    # Initialize MiniCourt
+    mini_court = MiniCourt(video_frames[0])
+
+
 
 
     # Draw Output
@@ -86,6 +90,9 @@ def main():
     # Draw keypoints, according to the first frame
     output_frames = courtline_detector.draw_keypoints_on_video(output_frames, courtline_keypoints)
 
+    # Draw Mini Court
+    output_frames = mini_court.draw_mini_court(output_frames)
+    
     # Draw frame number (top left corner)
     for i, frame in enumerate(output_frames):
         cv2.putText(frame, f"Frame n {i}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
