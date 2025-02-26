@@ -1,4 +1,5 @@
 from ultralytics import YOLO
+import supervision as sv
 import cv2
 import pickle 
 import sys 
@@ -185,6 +186,24 @@ class PlayerTracker:
             output_video_frames.append(frame)
         
         return output_video_frames
+
+    # TODO : Implement this method with supervision library
+    def draw_enhanced_bboxes(self, video_frames, player_detections):
+        """
+        Draw bounding boxes as well as IDs for the players.
+
+        Args:
+            video_frames : List of all the frames of the video.
+            player_detections : List returned by 'detect_frames()'.
+        
+        Returns:
+            output_video_frames : Frames of the video, now annotated
+                                  with bounding boxes & IDs for Players.
+        
+        
+        """
+        raise NotImplementedError
+    
 
 
 

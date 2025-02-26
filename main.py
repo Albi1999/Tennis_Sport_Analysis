@@ -44,7 +44,7 @@ def main():
     player_detections = player_tracker.detect_frames(video_frames,
                                                      read_from_stub = False,
                                                      stub_path = 'tracker_stubs/player_detections.pkl')
-    
+
     # Detect Ball 
     if ball_tracker_method == 'yolo':
         ball_detections = ball_tracker.detect_frames(video_frames,
@@ -70,6 +70,9 @@ def main():
 
     # Filter players
     player_detections = player_tracker.choose_and_filter_players(courtline_keypoints, player_detections)
+
+    
+    #print(f"Player detections: {player_detections[40][1]}")    # Example of how to access player detections at frame 40
 
     # Initialize MiniCourt
     mini_court = MiniCourt(video_frames[0])
