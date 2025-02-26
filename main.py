@@ -12,7 +12,8 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     video_number = 2
-    input_video_path = f'data/input_video{video_number}.mp4'
+    input_video_path = f'data/input_video{video_number}.mp4'  # Toy example
+    #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
     output_video_path = f'output/output_video{video_number}.mp4'
 
     # Initialize Tracker for Players & Ball
@@ -47,7 +48,7 @@ def main():
     # Detect Ball 
     if ball_tracker_method == 'yolo':
         ball_detections = ball_tracker.detect_frames(video_frames,
-                                                 read_from_stub = True,
+                                                 read_from_stub = False,
                                                  stub_path = 'tracker_stubs/ball_detections.pkl')
         # Interpolate the missing tracking positions for the ball
         ball_detections = ball_tracker.interpolate_ball_positions(ball_detections)
@@ -73,8 +74,15 @@ def main():
     # Initialize MiniCourt
     mini_court = MiniCourt(video_frames[0])
 
-
-
+    # Detect ball shots
+    ball_shots_frames = ball_tracker.get_ball_shot_frames(ball_detections)
+    print(f"Ball shots detected at frames: {ball_shots_frames}")
+    
+    # Convert player positions to mini court positions
+    player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
+                                                                                                                            ball_detections,
+                                                                                                                            courtline_keypoints)
+     
 
     # Draw Output
 
@@ -92,6 +100,8 @@ def main():
 
     # Draw Mini Court
     output_frames = mini_court.draw_mini_court(output_frames)
+    output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,0,0))
+    output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,0,255))
     
     # Draw frame number (top left corner)
     for i, frame in enumerate(output_frames):
