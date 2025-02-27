@@ -178,10 +178,10 @@ class PlayerTracker:
             for track_id, bbox in player_dict.items():
                 # extract coordinates of the bounding box
                 x1, y1, x2, y2 = bbox
-                # Draw text indicating the Player ID 
-                cv2.putText(frame, f"Player ID : {track_id}", (int(x1), int(y1) - 5),cv2.FONT_HERSHEY_PLAIN, 0.8, (255,0,0), 2)
-                # Draw the rectangle onto the frame
-                cv2.rectangle(frame , (int(x1), int(y1)), (int(x2), int(y2)), (255,0,0), 2)
+                # Draw text indicating the Player ID (Cyan)
+                cv2.putText(frame, f"Player ID : {track_id}", (int(x1), int(y1) - 5),cv2.FONT_HERSHEY_PLAIN, 0.8, (255,255,0), 2)
+                # Draw the rectangle onto the frame (Cyan)
+                cv2.rectangle(frame , (int(x1), int(y1)), (int(x2), int(y2)), (255,255,0), 2)
 
             output_video_frames.append(frame)
         

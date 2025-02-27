@@ -163,9 +163,9 @@ class BallTracker:
                 # extract coordinates of the bounding box
                 x1, y1, x2, y2 = bbox
                 # Draw text indicating the Player ID 
-                cv2.putText(frame, f"Ball ", (int(x1), int(y1) - 5),cv2.FONT_HERSHEY_PLAIN, 0.8, (0,0,255), 2)
+                cv2.putText(frame, f"Ball ", (int(x1), int(y1) - 5),cv2.FONT_HERSHEY_PLAIN, 0.8, (0,255,255), 2)
                 # Draw the rectangle onto the frame
-                cv2.rectangle(frame , (int(x1), int(y1)), (int(x2), int(y2)), (0,0,255), 2)
+                cv2.rectangle(frame , (int(x1), int(y1)), (int(x2), int(y2)), (0,255,255), 2)
 
             output_video_frames.append(frame)
         

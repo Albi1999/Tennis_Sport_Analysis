@@ -103,8 +103,10 @@ def main():
 
     # Draw Mini Court
     output_frames = mini_court.draw_mini_court(output_frames)
-    output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,0,0))
-    output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,0,255))
+    output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections)
+    output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
+    output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
+
     
     # Draw frame number (top left corner)
     for i, frame in enumerate(output_frames):

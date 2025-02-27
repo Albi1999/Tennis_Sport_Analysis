@@ -117,37 +117,32 @@ class MiniCourt():
             (2,3)
         ]
 
-    def draw_court(self,frame):
+    def draw_court(self, frame):
         '''Draw the mini court on the frame'''
-        for i in range(0, len(self.drawing_key_points),2):
+        for i in range(0, len(self.drawing_key_points), 2):
             x = int(self.drawing_key_points[i])
             y = int(self.drawing_key_points[i+1])
-            cv2.circle(frame, (x,y),5, (0,255,0),-1)
+            # Keypoints (Green)
+            cv2.circle(frame, (x, y), 5, (0, 255, 0), -1)
 
-        # Draw Lines
+        # Court lines (White)
         for line in self.lines:
             start_point = (int(self.drawing_key_points[line[0]*2]), int(self.drawing_key_points[line[0]*2+1]))
             end_point = (int(self.drawing_key_points[line[1]*2]), int(self.drawing_key_points[line[1]*2+1]))
-            cv2.line(frame, start_point, end_point, (0, 0, 0), 2)
+            cv2.line(frame, start_point, end_point, (255, 255, 255), 2)
 
-        # Draw net
+        # Net (Purple)
         net_start_point = (self.drawing_key_points[0], int((self.drawing_key_points[1] + self.drawing_key_points[5])/2))
         net_end_point = (self.drawing_key_points[2], int((self.drawing_key_points[1] + self.drawing_key_points[5])/2))
-        cv2.line(frame, net_start_point, net_end_point, (255, 255, 0), 2)
+        cv2.line(frame, net_start_point, net_end_point, (255, 0, 255), 2)
 
         return frame
 
-    def draw_background_rectangle(self,frame):
+    def draw_background_rectangle(self, frame):
         '''Draw the background rectangle on the frame'''
-        shapes = np.zeros_like(frame,np.uint8) 
-        alpha = 0.0 # Transparency factor
-        
-        # Draw the rectangle
-        cv2.rectangle(shapes, (self.start_x, self.start_y), (self.end_x, self.end_y), (255, 255, 255), cv2.FILLED)
         out = frame.copy()
-        mask = shapes.astype(bool)
-        out[mask] = cv2.addWeighted(frame, alpha, shapes, 1 - alpha, 0)[mask]
-
+        # Rectangle (Black)
+        cv2.rectangle(out, (self.start_x, self.start_y), (self.end_x, self.end_y), (0, 0, 0), cv2.FILLED)
         return out
 
     def draw_mini_court(self,frames):
@@ -278,7 +273,7 @@ class MiniCourt():
 
         return output_player_boxes , output_ball_boxes
     
-    def draw_points_on_mini_court(self,frames,postions, color=(0,255,0)):
+    def draw_points_on_mini_court(self,frames,postions, color=(255,255,0)):
         '''Draw points on the mini court'''
         for frame_num, frame in enumerate(frames):
             for _, position in postions[frame_num].items():
@@ -287,3 +282,97 @@ class MiniCourt():
                 y= int(y)
                 cv2.circle(frame, (x,y), 5, color, -1)
         return frames
+    
+    
+    def draw_player_distance_heatmap(self, frames, player_mini_court_detections, resolution=20, color_map=cv2.COLORMAP_HOT, alpha=0.6):
+        """
+        Draws a dynamic heatmap on the mini-court showing the distance of each point from the nearest player.
+        The heatmap is applied only to the upper part of the court (opponent's half).
+
+        Parameters:
+        frames - List of video frames to process
+        player_mini_court_detections - Player positions for each frame
+        resolution - Grid resolution for the heatmap
+        color_map - OpenCV color map to use
+        alpha - Heatmap transparency
+        """
+        # Create grid dimensions
+        grid_height = resolution
+        grid_width = resolution
+
+        # Calculate step sizes
+        x_step = self.court_drawing_width / grid_width
+        y_step = (self.court_end_y - self.court_start_y) / grid_height
+
+        # Find the y position of the net (mid-court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+
+        # Maximum possible distance for normalization
+        max_distance = np.sqrt(self.court_drawing_width**2 + (net_y - self.court_start_y)**2)
+
+        output_frames = []
+
+        # For each frame, create a specific heatmap
+        for frame_idx, frame_player_positions in enumerate(player_mini_court_detections):
+            if frame_idx >= len(frames):
+                break
+
+            # Create the grid for this frame's heatmap
+            # Use only the upper half of the grid
+            heatmap_grid = np.zeros((grid_height, grid_width))
+
+            # For each grid point, calculate the distance from the nearest player
+            for i in range(grid_width):
+                for j in range(grid_height):
+                    grid_x = self.court_start_x + i * x_step
+                    grid_y = self.court_start_y + j * y_step
+
+                    # Apply the heatmap only to the upper part of the court (above the net)
+                    if grid_y >= net_y:
+                        continue  # Skip pixels in the lower part
+
+                    min_distance = max_distance
+                    for player_id, position in frame_player_positions.items():
+                        if position is None:
+                            continue
+
+                        player_x, player_y = position
+                        distance = euclidean_distance((grid_x, grid_y), (player_x, player_y))
+                        min_distance = min(min_distance, distance)
+
+                    # Normalize the distance between 0 and 1
+                    normalized_distance = min_distance / max_distance
+                    heatmap_grid[j, i] = normalized_distance
+
+            # Apply the color map to the grid
+            heatmap_colored = cv2.applyColorMap((heatmap_grid * 255).astype(np.uint8), color_map)
+
+            # Resize to court dimensions
+            heatmap_resized = cv2.resize(
+                heatmap_colored, 
+                (self.court_drawing_width, self.court_end_y - self.court_start_y)
+            )
+
+            # Create a frame with the heatmap
+            frame_copy = frames[frame_idx].copy()
+
+            # Create a transparent overlay of the heatmap
+            overlay = frame_copy.copy()
+
+            # Apply the heatmap only to the upper part of the court
+            # From the starting position to the net
+            overlay[
+                self.court_start_y:net_y,  # Only from the upper part to the net
+                self.court_start_x:self.court_end_x
+            ] = heatmap_resized[0:(net_y-self.court_start_y), :]  # Take only the upper part of the heatmap
+
+            # Blend the overlay with the original frame
+            cv2.addWeighted(overlay, alpha, frame_copy, 1 - alpha, 0, frame_copy)
+
+            output_frames.append(frame_copy)
+
+        # If there are remaining frames, simply copy them
+        for i in range(len(output_frames), len(frames)):
+            output_frames.append(frames[i].copy())
+
+        return output_frames
