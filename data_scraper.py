@@ -14,16 +14,16 @@ def download_clip(url, start, end):
     command = [
         "yt-dlp",
         "--download-sections", f"*{start}-{end}",
-        "--format", "bv*[height<=720]",
+        "--format", "b[height<=720]",
         "-S vcodec:h264,res,acodec:m4a",
         url
     ]
     subprocess.run(command)
 
 def main():
-    url = 'https://youtu.be/U7uhxZF7oQM?si=yhpZCEhCeJhtdecf'
-    start = '00:31:43'
-    end = '00:32:04'
+    url = 'https://www.youtube.com/watch?v=wZnCcqm_g-E&t=3473s&ab_channel=Wimbledon'
+    start = '0:42:37'
+    end = '00:42:42'
     download_clip(url, start, end)
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@ from ultralytics import YOLO
 import supervision as sv
 import cv2
 import pickle 
+import numpy as np
 import sys 
 sys.path.append('../') # go out of the trackers folder 
 from utils import get_center_of_bbox, euclidean_distance
@@ -24,7 +25,46 @@ class PlayerTracker:
             ...
         """
 
-        # Take just the first frame
+
+        """
+        filtered_player_detections = []
+        # Collect the movements of all detected persons
+        persons_movement = {}
+        for player_dict in player_detections:
+            for track_id, bbox in player_dict.items():
+                player_center = get_center_of_bbox(bbox)
+                if track_id in persons_movement:
+                    persons_movement[track_id].append(player_center)
+                else: 
+                    persons_movement[track_id] = [player_center]
+
+        persons_movement_std = {}
+        for track_id, movement in persons_movement.items():
+            # Measure the standard deviation of each movement 
+            persons_movement_std[track_id] = np.std(movement)
+
+        
+        # Sort by highest deviation
+        persons_movement_std = dict(sorted(persons_movement_std.items(), key= lambda x : x[1], reverse = True))
+
+        # Gather the two persons with highest deviation in their movement : These should be our two players
+        chosen_players_ids = [list(persons_movement_std)[0], list(persons_movement_std)[1]]
+
+        # Get their bounding boxes
+        for player_dict in player_detections:
+            filtered_player_dict = {track_id : bbox for track_id, bbox in player_dict.items() if track_id in chosen_players_ids}
+            filtered_player_detections.append(filtered_player_dict)
+
+
+
+        return filtered_player_detections, chosen_players_ids
+        """
+       
+
+
+
+        
+    
         player_detections_first_frame = player_detections[0]
         chosen_players = self.choose_players(court_keypoints, player_detections_first_frame)
         filtered_player_detections = []
@@ -33,7 +73,8 @@ class PlayerTracker:
             filtered_player_dict = {track_id : bbox for track_id, bbox in player_dict.items() if track_id in chosen_players}
             filtered_player_detections.append(filtered_player_dict)
 
-        return filtered_player_detections
+        return filtered_player_detections, chosen_players
+        
 
 
 

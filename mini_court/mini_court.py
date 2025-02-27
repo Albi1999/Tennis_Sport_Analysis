@@ -209,7 +209,7 @@ class MiniCourt():
         return  mini_court_player_position
 
 
-    def convert_bounding_boxes_to_mini_court_coordinates(self,player_boxes, ball_boxes, original_court_key_points ):
+    def convert_bounding_boxes_to_mini_court_coordinates(self,player_boxes, ball_boxes, original_court_key_points, chosen_players_ids ):
         """ Convert the bounding boxes of the players and the ball to the mini court coordinates.
         Args:
             player_boxes (list): List of dictionaries containing the bounding boxes of the players.
@@ -219,9 +219,14 @@ class MiniCourt():
             output_player_boxes (list): List of dictionaries containing the bounding boxes of the players in the mini court.
             output_ball_boxes (list): List of dictionaries containing the bounding boxes of the ball in the mini court.
         """
+
+        # TODO : fix the player_heights (bc we dont know which player is which rn) ;
+        # TODO : fix that when a player is not tracked all the way through (all frames), this here fails
+
+
         player_heights = {
-            1: info.PLAYER_1_HEIGHT_METERS,
-            2: info.PLAYER_2_HEIGHT_METERS
+            chosen_players_ids[0]: info.PLAYER_1_HEIGHT_METERS,
+            chosen_players_ids[1]: info.PLAYER_2_HEIGHT_METERS
         }
 
         output_player_boxes= []

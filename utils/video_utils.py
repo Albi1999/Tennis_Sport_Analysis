@@ -1,5 +1,8 @@
+# pip install moviepy==1.0.3
+
 import cv2 
 from tqdm import tqdm 
+from moviepy.editor import VideoFileClip
 
 def read_video(video_path): # TODO : read in fps I think so we can reuse 
     """ 
@@ -49,5 +52,35 @@ def save_video(output_video_frames, output_video_path, fps):
         out.write(frame)
 
     out.release()
+
+
+
+
+
+def convert_mp4_to_mp3(mp4_file, mp3_file):
+    """
+    Convert an MP4 file to MP3 format.
+    
+    Parameters:
+    mp4_file (str): Path to the input MP4 file
+    mp3_file (str): Path to the output MP3 file
+    """
+
+    # Load the video file
+    video = VideoFileClip(mp4_file)
+    
+    # Extract the audio
+    audio = video.audio
+    
+    # Write the audio to an MP3 file
+    audio.write_audiofile(mp3_file)
+    
+    # Close the files to free up resources
+    audio.close()
+    video.close()
+
+
+        
+
 
 

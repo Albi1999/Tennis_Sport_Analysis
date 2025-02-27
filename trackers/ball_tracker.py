@@ -2,6 +2,13 @@ from ultralytics import YOLO
 import cv2
 import pickle 
 import pandas as pd 
+import librosa 
+import numpy as np 
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks, butter, sosfilt
+
+
+
 class BallTracker:
     def __init__(self, model_path):
         self.model = YOLO(model_path)
@@ -66,6 +73,79 @@ class BallTracker:
 
 
         return ball_detections 
+    
+    def get_ball_shot_frames_audio(self, audio_file, fps, plot=True):
+        # Load the audio file
+        y, sr = librosa.load(audio_file, sr=None)
+        
+        # Apply bandpass filter (150Hz-1800Hz)
+        nyquist = 0.5 * sr
+        low = 150 / nyquist
+        high = 1800 / nyquist
+        sos = butter(N=6, Wn=[low, high], btype='band', output='sos')
+        y_filtered = sosfilt(sos, y)
+        
+        # Compute the envelope of the filtered signal
+        y_abs = np.abs(y_filtered)
+        
+        # Apply smoothing to the envelope (adjust window_size as needed)
+        window_size = int(0.01 * sr)  # 10ms window
+        y_envelope = np.convolve(y_abs, np.ones(window_size)/window_size, mode='same')
+        
+        # Find peaks in the envelope
+        # Lower height threshold to catch more peaks
+        peaks, _ = find_peaks(y_envelope, 
+                            height=0.02,  # Lower threshold to catch more peaks
+                            distance=int(0.3 * sr),  # Minimum distance between peaks
+                            prominence=0.01)  # Find all distinct peaks 
+        
+        # Convert peak positions to time (seconds)
+        hit_times = peaks / sr
+        
+        # Convert times to frame numbers
+        hit_frames = [int(round(time * fps)) for time in hit_times]
+        
+        if plot:
+            plt.figure(figsize=(12, 10))
+            
+            # Plot filtered waveform with detected hits
+            plt.subplot(3, 1, 1)
+            times = np.linspace(0, len(y_filtered)/sr, len(y_filtered))
+            plt.plot(times, y_filtered)
+            plt.vlines(hit_times, -0.2, 0.2, color='r', linewidth=1)
+            plt.title('Filtered Audio Waveform (150Hz-1800Hz) with Detected Hits')
+            plt.xlabel('Time (s)')
+            
+            # Plot the envelope with detected peaks
+            plt.subplot(3, 1, 2)
+            plt.plot(times, y_envelope)
+            plt.vlines(hit_times, 0, np.max(y_envelope), color='r', linewidth=1, label='Detected Hits')
+            plt.title('Signal Envelope with Detected Peaks')
+            plt.xlabel('Time (s)')
+            plt.legend()
+            
+            # Plot frame numbers
+            plt.subplot(3, 1, 3)
+            frame_times = np.arange(0, len(y_filtered)/sr, 1/fps)
+            frame_indices = np.arange(0, len(frame_times))
+            if len(frame_times) > 1000:  # If too many frames, subsample for clarity
+                step = len(frame_times) // 1000
+                frame_times = frame_times[::step]
+                frame_indices = frame_indices[::step]
+            plt.plot(frame_times, frame_indices, 'b-', alpha=0.5)
+            plt.scatter([hit_times], [hit_frames], color='r', s=50)
+            for i, (t, f) in enumerate(zip(hit_times, hit_frames)):
+                plt.annotate(f"Frame {f}", (t, f), xytext=(5, 5), textcoords='offset points')
+            plt.title('Detected Hits by Frame Number')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Frame Number')
+            
+            plt.tight_layout()
+            plt.savefig("AUDIO.png")
+            # plt.show()
+        
+      #  print(f"Detected {len(hit_frames)} racket hits at frames: {hit_frames}")
+        return hit_frames
     
     def get_ball_shot_frames(self,ball_positions):
         """
@@ -170,6 +250,25 @@ class BallTracker:
             output_video_frames.append(frame)
         
         return output_video_frames
+    
+
+    def draw_ball_hits(self, video_frames, hit_frames):
+
+        output_video_frames = []
+        counter = 0
+        for i,frame in enumerate(video_frames):
+            cv2.putText(frame, f"Racket Hit n. {counter}", (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,255), 1)
+            if i in hit_frames:
+                counter += 1
+
+        
+            output_video_frames.append(frame)
+        
+        return output_video_frames 
+
+            
+
+
 
 
 
