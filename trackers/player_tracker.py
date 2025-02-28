@@ -19,18 +19,21 @@ class PlayerTracker:
         based on the first frame.
 
         Args:
-            ...
+            court_keypoints (List) : List of keypoints of the court.
+            player_detections (List of Dicts) : List of Dicts, where each Dict contains
+            the found players in a frame, given by their ID (key) and bounding box coordinates (value).
 
         Returns:
-            ...
+            filtered_player_detections (List of Dicts) : List of Dicts, where each Dict contains
+            the found players in a frame, given by their ID (key) and bounding box coordinates (value).
+            chosen_players_ids (List) : the tracking IDs of the 2 players.
         """
-
-
-        """
+        
         filtered_player_detections = []
+        
         # Collect the movements of all detected persons
         persons_movement = {}
-        for player_dict in player_detections:
+        for frame_num, player_dict in enumerate(player_detections):
             for track_id, bbox in player_dict.items():
                 player_center = get_center_of_bbox(bbox)
                 if track_id in persons_movement:
@@ -38,43 +41,58 @@ class PlayerTracker:
                 else: 
                     persons_movement[track_id] = [player_center]
 
-        persons_movement_std = {}
-        for track_id, movement in persons_movement.items():
-            # Measure the standard deviation of each movement 
-            persons_movement_std[track_id] = np.std(movement)
-
+        # Calculate total displacement and average displacement per frame
+        persons_displacement = {}
+        persons_consistency = {}  # Track how consistently the player appears
         
-        # Sort by highest deviation
-        persons_movement_std = dict(sorted(persons_movement_std.items(), key= lambda x : x[1], reverse = True))
+        for track_id, movements in persons_movement.items():
+            if len(movements) < 5:  # Skip players that appear in very few frames
+                continue
+                
+            # Calculate total displacement
+            total_displacement = 0
+            for i in range(1, len(movements)):
+                prev_pos = movements[i-1]
+                curr_pos = movements[i]
+                displacement = euclidean_distance(prev_pos, curr_pos)
+                total_displacement += displacement
+                
+            # Calculate average displacement and consistency score
+            avg_displacement = total_displacement / len(movements) if len(movements) > 0 else 0
+            consistency = len(movements) / len(player_detections)  # Ratio of frames where player appears
+            
+            persons_displacement[track_id] = avg_displacement * consistency  # Weight by consistency
+            persons_consistency[track_id] = consistency
 
-        # Gather the two persons with highest deviation in their movement : These should be our two players
-        chosen_players_ids = [list(persons_movement_std)[0], list(persons_movement_std)[1]]
-
-        # Get their bounding boxes
-        for player_dict in player_detections:
-            filtered_player_dict = {track_id : bbox for track_id, bbox in player_dict.items() if track_id in chosen_players_ids}
-            filtered_player_detections.append(filtered_player_dict)
-
-
-
-        return filtered_player_detections, chosen_players_ids
-        """
-       
-
-
-
-        
-    
-        player_detections_first_frame = player_detections[0]
-        chosen_players = self.choose_players(court_keypoints, player_detections_first_frame)
-        filtered_player_detections = []
-        # Select the chosen players based on their tracking IDs
-        for player_dict in player_detections: 
-            filtered_player_dict = {track_id : bbox for track_id, bbox in player_dict.items() if track_id in chosen_players}
-            filtered_player_detections.append(filtered_player_dict)
-
-        return filtered_player_detections, chosen_players
-        
+        # Sort by weighted displacement (higher displacement and more consistent appearance)
+        if len(persons_displacement) >= 2:
+            print("Choosing players based on displacement")
+            persons_displacement = dict(sorted(persons_displacement.items(), key=lambda x: x[1], reverse=True))
+            
+            # Gather the two persons with highest weighted displacement
+            chosen_players_ids = list(persons_displacement.keys())[:2]
+            
+            # Get their bounding boxes
+            for player_dict in player_detections:
+                filtered_player_dict = {}
+                for track_id, bbox in player_dict.items():
+                    if track_id in chosen_players_ids:
+                        filtered_player_dict[track_id] = bbox
+                filtered_player_detections.append(filtered_player_dict)
+                
+            return filtered_player_detections, chosen_players_ids
+        else:
+            print("Choosing players based on keypoints")
+            # Fallback to the closest-to-keypoints method if not enough moving players
+            player_detections_first_frame = player_detections[0]
+            chosen_players = self.choose_players(court_keypoints, player_detections_first_frame)
+            filtered_player_detections = []
+            
+            for player_dict in player_detections: 
+                filtered_player_dict = {track_id: bbox for track_id, bbox in player_dict.items() if track_id in chosen_players}
+                filtered_player_detections.append(filtered_player_dict)
+                
+            return filtered_player_detections, chosen_players
 
 
 

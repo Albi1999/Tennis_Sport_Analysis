@@ -10,16 +10,19 @@ import torch
 def main():
 
     AUDIO = True
+    DRAW_MINI_COURT = False
+    
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     video_number = 101
     input_video_path = f'data/input_video{video_number}.mp4'  # Toy example
+    #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
+    
     if AUDIO:
         input_video_path_audio = f'data/input_video{video_number}_audio.mp3'
-        convert_mp4_to_mp3(input_video_path, input_video_path_audio )
+        convert_mp4_to_mp3(input_video_path, input_video_path_audio)
         
-    #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
     output_video_path = f'output/output_video{video_number}.mp4'
 
     # Initialize Tracker for Players & Ball
@@ -89,18 +92,22 @@ def main():
     #print(f"Player detections: {player_detections[40][1]}")    # Example of how to access player detections at frame 40
 
     # Initialize MiniCourt
- #   mini_court = MiniCourt(video_frames[0])
+    mini_court = MiniCourt(video_frames[0])
 
     # Detect ball shots
    # ball_shots_frames = ball_tracker.get_ball_shot_frames(ball_detections)
    # print(f"Ball shots detected at frames: {ball_shots_frames}")
     
     # Convert player positions to mini court positions
- #   player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
- #                                                                                                                           ball_detections,
- #                                                                                                                           courtline_keypoints,
- #                                                                                                                           chosen_players_ids)
-     
+    player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
+                                                                                                                            ball_detections,
+                                                                                                                            courtline_keypoints,
+                                                                                                                            chosen_players_ids)
+    
+    # Create Heatmap Animation
+    heatmap_animation_path = mini_court.create_heatmap_animation(player_mini_court_detections,
+                                                                output_path=f"output/animations/heatmap_animation{video_number}.mp4")
+    print(f"Heatmap animation saved to: {heatmap_animation_path}")
 
     # Draw Output
 
@@ -120,10 +127,11 @@ def main():
     output_frames = courtline_detector.draw_keypoints_on_video(output_frames, courtline_keypoints)
 
     # Draw Mini Court
-  #  output_frames = mini_court.draw_mini_court(output_frames)
-  #  output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections)
-  #  output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
-  #  output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
+    if DRAW_MINI_COURT:
+        output_frames = mini_court.draw_mini_court(output_frames)
+        output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections)
+        output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
+        output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
 
     
     # Draw frame number (top left corner)

@@ -20,7 +20,7 @@ class MiniCourt():
         self.drawing_rectangle_width = 250          # Width of the mini court in pixels
         self.drawing_rectangle_height = 500         # Height of the mini court in pixels
         self.buffer = 50                            # Distance from the right and top of the frame to the mini court
-        self.padding_court=20                       # Padding from the mini court to the court 
+        self.padding_court= 20                      # Padding from the mini court to the court 
 
         # Define the mini court in the frame
         self.set_canvas_background_box_position(frame)
@@ -232,11 +232,16 @@ class MiniCourt():
         output_player_boxes= []
         output_ball_boxes= []
 
+
         for frame_num, player_bbox in enumerate(player_boxes):
             ball_box = ball_boxes[frame_num][1]
             ball_position = get_center_of_bbox(ball_box)
-            closest_player_id_to_ball = min(player_bbox.keys(), key=lambda x: euclidean_distance(ball_position, get_center_of_bbox(player_bbox[x])))
-
+            
+            if player_bbox:
+                closest_player_id_to_ball = min(player_bbox.keys(), key=lambda x: euclidean_distance(ball_position, get_center_of_bbox(player_bbox[x])))
+            else:
+                closest_player_id_to_ball = None
+            
             output_player_bboxes_dict = {}
             for player_id, bbox in player_bbox.items():
                 foot_position = get_foot_position(bbox)
@@ -249,8 +254,19 @@ class MiniCourt():
                 # Get Player height in pixels
                 frame_index_min = max(0, frame_num-20)
                 frame_index_max = min(len(player_boxes), frame_num+50)
-                bboxes_heights_in_pixels = [get_height_of_bbox(player_boxes[i][player_id]) for i in range (frame_index_min,frame_index_max)]
-                max_player_height_in_pixels = max(bboxes_heights_in_pixels)
+                
+                # Get the maximum height of the player in pixels
+                bboxes_heights_in_pixels = []
+                for i in range(frame_index_min, frame_index_max):
+                    if player_id in player_boxes[i]:
+                        bboxes_heights_in_pixels.append(get_height_of_bbox(player_boxes[i][player_id]))
+
+                if bboxes_heights_in_pixels:
+                    max_player_height_in_pixels = max(bboxes_heights_in_pixels)
+                else:
+                    # Default value
+                    max_player_height_in_pixels = 200  # value to be adjusted
+
 
                 mini_court_player_position = self.get_mini_court_coordinates(foot_position,
                                                                             closest_key_point, 
@@ -381,3 +397,125 @@ class MiniCourt():
             output_frames.append(frames[i].copy())
 
         return output_frames
+    
+    
+    def create_heatmap_animation(self, player_mini_court_detections, output_path="/output/heatmap_animation.mp4", 
+                            resolution=20, color_map=cv2.COLORMAP_HOT, alpha=0.6, fps=15):
+        """
+        Creates an animation showing only the tennis court and dynamic heatmap.
+        
+        Parameters:
+        player_mini_court_detections - Player positions for each frame
+        output_path - Path where to save the animation
+        resolution - Grid resolution for the heatmap
+        color_map - OpenCV color map to use
+        alpha - Heatmap transparency
+        fps - Frames per second of the animation
+        """
+        # Create grid dimensions
+        grid_height = resolution
+        grid_width = resolution
+
+        # Calculate step sizes
+        x_step = self.court_drawing_width / grid_width
+        y_step = (self.court_end_y - self.court_start_y) / grid_height
+
+        # Find the y position of the net (mid-court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+
+        # Maximum possible distance for normalization
+        max_distance = np.sqrt(self.court_drawing_width**2 + (net_y - self.court_start_y)**2)
+
+        # Create a video writer
+        width = self.drawing_rectangle_width
+        height = self.drawing_rectangle_height
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        # For each frame, create a specific heatmap
+        for frame_idx, frame_player_positions in enumerate(player_mini_court_detections):
+            # Create an empty black image
+            court_image = np.zeros((height, width, 3), dtype=np.uint8)
+            
+            # Draw court lines (white)
+            for line in self.lines:
+                start_point = (int(self.drawing_key_points[line[0]*2]) - self.start_x, 
+                            int(self.drawing_key_points[line[0]*2+1]) - self.start_y)
+                end_point = (int(self.drawing_key_points[line[1]*2]) - self.start_x, 
+                            int(self.drawing_key_points[line[1]*2+1]) - self.start_y)
+                cv2.line(court_image, start_point, end_point, (255, 255, 255), 2)
+
+            # Draw the net (purple)
+            net_start_point = (self.drawing_key_points[0] - self.start_x, 
+                            int((self.drawing_key_points[1] + self.drawing_key_points[5])/2) - self.start_y)
+            net_end_point = (self.drawing_key_points[2] - self.start_x, 
+                        int((self.drawing_key_points[1] + self.drawing_key_points[5])/2) - self.start_y)
+            cv2.line(court_image, net_start_point, net_end_point, (255, 0, 255), 2)
+
+            # Create the grid for this frame's heatmap
+            heatmap_grid = np.zeros((grid_height, grid_width))
+
+            # For each grid point, calculate distance from nearest player
+            for i in range(grid_width):
+                for j in range(grid_height):
+                    grid_x = self.court_start_x + i * x_step
+                    grid_y = self.court_start_y + j * y_step
+
+                    # Apply heatmap only to upper part of court (above net)
+                    if grid_y >= net_y:
+                        continue  # Skip pixels in lower part
+
+                    min_distance = max_distance
+                    for player_id, position in frame_player_positions.items():
+                        if position is None:
+                            continue
+
+                        player_x, player_y = position
+                        distance = euclidean_distance((grid_x, grid_y), (player_x, player_y))
+                        min_distance = min(min_distance, distance)
+
+                    # Normalize distance between 0 and 1
+                    normalized_distance = min_distance / max_distance
+                    heatmap_grid[j, i] = normalized_distance
+
+            # Apply color map to grid
+            heatmap_colored = cv2.applyColorMap((heatmap_grid * 255).astype(np.uint8), color_map)
+
+            # Resize to court dimensions
+            heatmap_resized = cv2.resize(
+                heatmap_colored, 
+                (self.court_drawing_width, self.court_end_y - self.court_start_y)
+            )
+
+            # Create transparent overlay of heatmap
+            overlay = court_image.copy()
+
+            # Apply heatmap only to upper part of court
+            court_y_offset = self.padding_court
+            court_x_offset = self.padding_court
+            
+            overlay[
+                court_y_offset:net_y-self.start_y,
+                court_x_offset:self.court_drawing_width+court_x_offset
+            ] = heatmap_resized[0:(net_y-self.court_start_y), :]
+
+            # Blend overlay with court image
+            result = cv2.addWeighted(overlay, alpha, court_image, 1-alpha, 0)
+            
+            # Draw players as points
+            for player_id, position in frame_player_positions.items():
+                if position is None:
+                    continue
+                x, y = position
+                x_adj = int(x - self.start_x)
+                y_adj = int(y - self.start_y)
+                if 0 <= x_adj < width and 0 <= y_adj < height:
+                    cv2.circle(result, (x_adj, y_adj), 5, (0, 0, 255), -1)  # Red for players
+
+            # Write frame to video
+            video_writer.write(result)
+
+        # Release the writer
+        video_writer.release()
+        
+        return output_path
