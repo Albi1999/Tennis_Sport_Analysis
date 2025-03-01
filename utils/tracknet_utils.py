@@ -274,3 +274,15 @@ def draw_ball_hits(video_frames, hit_frames):
         output_video_frames.append(frame)
     
     return output_video_frames 
+
+def convert_ball_detection_to_bbox(ball_track, padding=5):
+    """ Convert ball detection to bounding box format"""
+    bboxes = []
+    for i in range(len(ball_track)):
+        if ball_track[i][0]:
+            x = ball_track[i][0]
+            y = ball_track[i][1]
+            bboxes.append([x-padding, y-padding, x+padding, y+padding])
+        else:
+            bboxes.append(None)
+    return bboxes

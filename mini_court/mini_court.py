@@ -17,10 +17,10 @@ from utils import (
 
 class MiniCourt():
     def __init__(self,frame):
-        self.drawing_rectangle_width = 250          # Width of the mini court in pixels
-        self.drawing_rectangle_height = 500         # Height of the mini court in pixels
+        self.drawing_rectangle_width = 100          # Width of the mini court in pixels (depends on the image size)
+        self.drawing_rectangle_height = 200         # Height of the mini court in pixels (depends on the image size)
         self.buffer = 50                            # Distance from the right and top of the frame to the mini court
-        self.padding_court= 20                      # Padding from the mini court to the court 
+        self.padding_court= 10                      # Padding from the mini court to the court (depends on the image size)
 
         # Define the mini court in the frame
         self.set_canvas_background_box_position(frame)
@@ -209,90 +209,95 @@ class MiniCourt():
         return  mini_court_player_position
 
 
-    def convert_bounding_boxes_to_mini_court_coordinates(self,player_boxes, ball_boxes, original_court_key_points, chosen_players_ids ):
-        """ Convert the bounding boxes of the players and the ball to the mini court coordinates.
+    def convert_bounding_boxes_to_mini_court_coordinates(self, player_boxes, ball_boxes, original_court_key_points, chosen_players_ids):
+        """
+        Convert the bounding boxes of the players and the ball to mini court coordinates 
+        using homography transformation.
+        
         Args:
             player_boxes (list): List of dictionaries containing the bounding boxes of the players.
             ball_boxes (list): List of dictionaries containing the bounding boxes of the ball.
             original_court_key_points (list): List of the key points of the court in the original frame.
+            chosen_players_ids (list): List of the IDs of the chosen players.
+            
         Returns:
-            output_player_boxes (list): List of dictionaries containing the bounding boxes of the players in the mini court.
-            output_ball_boxes (list): List of dictionaries containing the bounding boxes of the ball in the mini court.
+            output_player_boxes (list): List of dictionaries containing player positions in mini court.
+            output_ball_boxes (list): List of dictionaries containing ball positions in mini court.
         """
-
-        # TODO : fix the player_heights (bc we dont know which player is which rn) ;
-        # TODO : fix that when a player is not tracked all the way through (all frames), this here fails
-
-
-        player_heights = {
-            chosen_players_ids[0]: info.PLAYER_1_HEIGHT_METERS,
-            chosen_players_ids[1]: info.PLAYER_2_HEIGHT_METERS
-        }
-
-        output_player_boxes= []
-        output_ball_boxes= []
-
-
+        output_player_boxes = []
+        output_ball_boxes = []
+        
+        # Create source and destination points for homography
+        src_points = []
+        dst_points = []
+        
+        # Use court keypoints to create source and destination points for homography
+        # We'll use the 4 corners of the court plus additional key points if available
+        key_point_indices = [0, 1, 2, 3]  # Corners of the court
+        
+        for idx in key_point_indices:
+            # Source points from the original court
+            src_points.append([original_court_key_points[idx*2], original_court_key_points[idx*2+1]])
+            
+            # Destination points in the mini court
+            dst_points.append([self.drawing_key_points[idx*2], self.drawing_key_points[idx*2+1]])
+        
+        # Add more keypoints if we have them (like service lines, etc.)
+        for idx in [4, 5, 6, 7, 12, 13]:
+            if idx*2+1 < len(original_court_key_points) and idx*2+1 < len(self.drawing_key_points):
+                src_points.append([original_court_key_points[idx*2], original_court_key_points[idx*2+1]])
+                dst_points.append([self.drawing_key_points[idx*2], self.drawing_key_points[idx*2+1]])
+        
+        # Convert to numpy arrays
+        src_points = np.array(src_points, dtype=np.float32)
+        dst_points = np.array(dst_points, dtype=np.float32)
+        
+        # Calculate homography matrix
+        H, _ = cv2.findHomography(src_points, dst_points, cv2.RANSAC, 5.0)
+        
+        # Process each frame
         for frame_num, player_bbox in enumerate(player_boxes):
-            ball_box = ball_boxes[frame_num][1]
-            ball_position = get_center_of_bbox(ball_box)
-            
-            if player_bbox:
-                closest_player_id_to_ball = min(player_bbox.keys(), key=lambda x: euclidean_distance(ball_position, get_center_of_bbox(player_bbox[x])))
-            else:
-                closest_player_id_to_ball = None
-            
+            # Process players
             output_player_bboxes_dict = {}
+            
             for player_id, bbox in player_bbox.items():
+                # Get foot position of the player
                 foot_position = get_foot_position(bbox)
-
-                # Get the closest keypoint in pixels
-                closest_key_point_index = get_closest_keypoint_index(foot_position,original_court_key_points, [0,2,12,13])
-                closest_key_point = (original_court_key_points[closest_key_point_index*2], 
-                                     original_court_key_points[closest_key_point_index*2+1])
-
-                # Get Player height in pixels
-                frame_index_min = max(0, frame_num-20)
-                frame_index_max = min(len(player_boxes), frame_num+50)
                 
-                # Get the maximum height of the player in pixels
-                bboxes_heights_in_pixels = []
-                for i in range(frame_index_min, frame_index_max):
-                    if player_id in player_boxes[i]:
-                        bboxes_heights_in_pixels.append(get_height_of_bbox(player_boxes[i][player_id]))
-
-                if bboxes_heights_in_pixels:
-                    max_player_height_in_pixels = max(bboxes_heights_in_pixels)
-                else:
-                    # Default value
-                    max_player_height_in_pixels = 200  # value to be adjusted
-
-
-                mini_court_player_position = self.get_mini_court_coordinates(foot_position,
-                                                                            closest_key_point, 
-                                                                            closest_key_point_index, 
-                                                                            max_player_height_in_pixels,
-                                                                            player_heights[player_id]
-                                                                            )
+                # Convert to homogeneous coordinates
+                point = np.array([foot_position[0], foot_position[1], 1], dtype=np.float32).reshape(1, 3)
                 
+                # Apply homography transformation
+                transformed_point = np.dot(H, point.T).T
+                
+                # Convert back from homogeneous coordinates
+                transformed_point = transformed_point / transformed_point[0, 2]
+                
+                # Save the transformed coordinates
+                mini_court_player_position = (transformed_point[0, 0], transformed_point[0, 1])
                 output_player_bboxes_dict[player_id] = mini_court_player_position
-
-                if closest_player_id_to_ball == player_id:
-                    # Get the closest keypoint in pixels
-                    closest_key_point_index = get_closest_keypoint_index(ball_position,original_court_key_points, [0,2,12,13])
-                    closest_key_point = (original_court_key_points[closest_key_point_index*2], 
-                                        original_court_key_points[closest_key_point_index*2+1])
-                    
-                    mini_court_player_position = self.get_mini_court_coordinates(ball_position,
-                                                                            closest_key_point, 
-                                                                            closest_key_point_index, 
-                                                                            max_player_height_in_pixels,
-                                                                            player_heights[player_id]
-                                                                            )
-                    output_ball_boxes.append({1:mini_court_player_position})
+            
             output_player_boxes.append(output_player_bboxes_dict)
-
-        return output_player_boxes , output_ball_boxes
+            
+            # Process ball
+            if frame_num < len(ball_boxes):
+                ball_box = ball_boxes[frame_num][1]
+                ball_position = get_center_of_bbox(ball_box)
+                
+                # Convert ball position to homogeneous coordinates
+                ball_point = np.array([ball_position[0], ball_position[1], 1], dtype=np.float32).reshape(1, 3)
+                
+                # Apply homography transformation
+                transformed_ball = np.dot(H, ball_point.T).T
+                
+                # Convert back from homogeneous coordinates
+                transformed_ball = transformed_ball / transformed_ball[0, 2]
+                
+                # Save the transformed coordinates
+                mini_court_ball_position = (transformed_ball[0, 0], transformed_ball[0, 1])
+                output_ball_boxes.append({1: mini_court_ball_position})
+        
+        return output_player_boxes, output_ball_boxes
     
     def draw_points_on_mini_court(self,frames,postions, color=(255,255,0)):
         '''Draw points on the mini court'''
@@ -399,10 +404,323 @@ class MiniCourt():
         return output_frames
     
     
-    def create_heatmap_animation(self, player_mini_court_detections, output_path="/output/heatmap_animation.mp4", 
+    def draw_ball_landing_points(self, frames, ball_mini_court_detections, landing_frames, color=(0, 255, 255), size=5):
+        """
+        Draws ball landing points on the mini-court.
+        For each segment between consecutive landing frames, shows the future landing point.
+        
+        Parameters:
+        frames - List of video frames to process
+        ball_mini_court_detections - Ball positions in mini-court coordinates
+        landing_frames - List of frame indices where the ball hits the ground
+        color - Color of the landing points (BGR format)
+        size - Size of the circle representing the landing point
+        """
+        output_frames = frames.copy()
+        
+        # Create intervals based on landing frames
+        intervals = []
+        for i in range(len(landing_frames)):
+            if i == 0:
+                start = 0
+            else:
+                start = landing_frames[i-1] + 1
+            
+            end = landing_frames[i]
+            intervals.append((start, end, landing_frames[i]))
+        
+        # Add final interval if needed
+        if landing_frames[-1] < len(frames) - 1:
+            intervals.append((landing_frames[-1] + 1, len(frames) - 1, landing_frames[-1]))
+        
+        # Process each frame
+        for frame_idx in range(len(frames)):
+            # Find which interval this frame belongs to
+            target_landing_frame = None
+            for start, end, landing_frame in intervals:
+                if start <= frame_idx <= end:
+                    target_landing_frame = landing_frame
+                    break
+            
+            if target_landing_frame is not None and target_landing_frame < len(ball_mini_court_detections):
+                # Get the landing position
+                if 1 in ball_mini_court_detections[target_landing_frame]:
+                    landing_pos = ball_mini_court_detections[target_landing_frame][1]
+                    
+                    x, y = landing_pos
+                    x = int(x)
+                    y = int(y)
+                    
+                    # Draw the landing point
+                    cv2.circle(output_frames[frame_idx], (x, y), size, color, -1)
+                    
+                    # Draw an "X" mark to make it more visible
+                    line_length = size - 2
+                    cv2.line(output_frames[frame_idx], 
+                            (x - line_length, y - line_length),
+                            (x + line_length, y + line_length),
+                            (0, 0, 255), 2)
+                    cv2.line(output_frames[frame_idx],
+                            (x - line_length, y + line_length),
+                            (x + line_length, y - line_length),
+                            (0, 0, 255), 2)
+        
+        return output_frames
+
+    def draw_shot_trajectories(self, frames, player_mini_court_detections, ball_mini_court_detections, 
+                            landing_frames, player_hit_frames,
+                            line_color=(0, 255, 255), dot_color=(0, 255, 255), line_thickness=2):
+        """
+        Draws shot trajectories as dotted lines from lower player hit frames to landing positions.
+        
+        Parameters:
+        frames - List of video frames to process
+        player_mini_court_detections - Player positions for each frame
+        ball_mini_court_detections - Ball positions for each frame
+        landing_frames - List of frame indices where the ball hits the ground
+        player_hit_frames - List of frame indices where the lower player hits the ball
+        line_color - Color of the trajectory line (BGR format)
+        dot_color - Color of the landing point (BGR format)
+        line_thickness - Thickness of the trajectory line
+        """
+        output_frames = frames.copy()
+        
+        # Find the y position of the net (mid-court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+        
+        # Map hit frames to nearest landing frames
+        hit_to_landing = {}
+        for hit_frame in player_hit_frames:
+            # Find the next landing after this hit
+            next_landing = next((lf for lf in landing_frames if lf > hit_frame), None)
+            if next_landing:
+                hit_to_landing[hit_frame] = next_landing
+        
+        # Process each frame
+        for frame_idx in range(len(frames)):
+            # Find which hit frame this current frame belongs to
+            current_hit_frame = None
+            current_landing_frame = None
+            
+            for hit_frame, landing_frame in hit_to_landing.items():
+                if hit_frame <= frame_idx < landing_frame:
+                    current_hit_frame = hit_frame
+                    current_landing_frame = landing_frame
+                    break
+            
+            # If we're in a valid interval between hit and landing
+            if current_hit_frame is not None and current_landing_frame is not None:
+                # Get the ball position at hit frame
+                if current_hit_frame < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[current_hit_frame]:
+                    ball_hit_pos = ball_mini_court_detections[current_hit_frame][1]
+                    
+                    # Get the landing position
+                    if current_landing_frame < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[current_landing_frame]:
+                        landing_pos = ball_mini_court_detections[current_landing_frame][1]
+                        landing_x, landing_y = int(landing_pos[0]), int(landing_pos[1])
+                        
+                        # Check if the landing position is in the upper part of the court
+                        if landing_y < net_y:
+                            # Find the closest player to the ball at the hit frame
+                            min_distance = float('inf')
+                            closest_player_pos = None
+                            
+                            for player_id, position in player_mini_court_detections[current_hit_frame].items():
+                                if position is not None:
+                                    dist = euclidean_distance(position, ball_hit_pos)
+                                    if dist < min_distance:
+                                        min_distance = dist
+                                        closest_player_pos = position
+                            
+                            if closest_player_pos is not None:
+                                player_x, player_y = int(closest_player_pos[0]), int(closest_player_pos[1])
+                                
+                                # Check if player is in the lower part of the court
+                                if player_y >= net_y:
+                                    # Draw the landing point
+                                    cv2.circle(output_frames[frame_idx], (landing_x, landing_y), 5, dot_color, -1)
+                                    
+                                    # Draw dotted line from player to landing position
+                                    line_length = np.sqrt((landing_x - player_x)**2 + (landing_y - player_y)**2)
+                                    num_segments = int(line_length / 10)  # One segment every ~10 pixels
+                                    
+                                    if num_segments > 1:
+                                        # Create points along the line
+                                        for i in range(num_segments):
+                                            t = i / (num_segments - 1)
+                                            dot_x = int(player_x + t * (landing_x - player_x))
+                                            dot_y = int(player_y + t * (landing_y - player_y))
+                                            
+                                            # Draw a small line segment (dot) at this position
+                                            if i % 2 == 0:  # Skip every other segment for dotted effect
+                                                cv2.circle(output_frames[frame_idx], (dot_x, dot_y), 1, line_color, line_thickness)
+        
+        return output_frames
+
+    def draw_ball_landing_heatmap(self, frames, player_mini_court_detections, ball_mini_court_detections, 
+                                landing_frames, player_hit_frames,
+                                sigma=15, alpha=0.7, color_map=cv2.COLORMAP_HOT, fade_frames=60):
+        """
+        Creates a dynamic Gaussian heatmap showing ball landing areas from lower player hits.
+        For each shot from the lower player, shows a NEW heatmap for the next landing point.
+        Hides the heatmap completely when a player in the upper part of the court hits the ball.
+        
+        Parameters:
+        frames - List of video frames to process
+        player_mini_court_detections - Player positions for each frame
+        ball_mini_court_detections - Ball positions in mini-court coordinates
+        landing_frames - List of frame indices where the ball hits the ground
+        player_hit_frames - List of frame indices where the lower player hits the ball
+        sigma - Standard deviation for Gaussian blur (controls the spread of each landing point)
+        alpha - Transparency of the heatmap
+        color_map - OpenCV colormap to use for visualization
+        fade_frames - Number of frames over which a landing point gradually appears
+        """
+        output_frames = frames.copy()
+        
+        # Court dimensions
+        court_width = self.court_end_x - self.court_start_x
+        court_height = self.court_end_y - self.court_start_y
+        
+        # Find the y position of the net (mid-court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+        
+        # Determine the sequence of hits (who hit when) and their landing points
+        hit_sequence = []
+        
+        # Process all landing frames to detect hits
+        for i, landing_frame in enumerate(landing_frames):
+            if i == 0:
+                continue  # Skip first landing as we don't know who hit before it
+                    
+            # Find the previous landing
+            prev_landing = landing_frames[i-1]
+            
+            # Determine mid-point or most likely frame where ball was hit after previous landing
+            hit_frame = prev_landing + max(1, (landing_frame - prev_landing) // 3)
+            
+            # Find who hit the ball (closest player to ball)
+            if hit_frame < len(player_mini_court_detections) and hit_frame < len(ball_mini_court_detections):
+                if 1 in ball_mini_court_detections[hit_frame]:
+                    ball_pos = ball_mini_court_detections[hit_frame][1]
+                    
+                    # Find closest player and check if they're above or below net
+                    min_dist = float('inf')
+                    closest_player_y = None
+                    
+                    for player_id, position in player_mini_court_detections[hit_frame].items():
+                        if position is not None:
+                            dist = euclidean_distance(position, ball_pos)
+                            if dist < min_dist:
+                                min_dist = dist
+                                closest_player_y = position[1]
+                    
+                    if closest_player_y is not None:
+                        # Add to hit sequence: hit_frame, is_upper_player, landing_frame
+                        is_upper_player = closest_player_y < net_y
+                        
+                        # Get the landing position
+                        landing_pos = None
+                        if landing_frame < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[landing_frame]:
+                            landing_pos = ball_mini_court_detections[landing_frame][1]
+                            landing_x = int(landing_pos[0]) - self.court_start_x
+                            landing_y = int(landing_pos[1]) - self.court_start_y
+                            
+                            # Only consider valid landings
+                            if 0 <= landing_x < court_width and 0 <= landing_y < court_height:
+                                hit_sequence.append((hit_frame, is_upper_player, landing_frame, (landing_x, landing_y)))
+        
+        # Sort hits by frame number
+        hit_sequence.sort(key=lambda x: x[0])
+        
+        # Process each frame
+        for frame_idx, frame in enumerate(frames):
+            # Find the active hit (the most recent hit before or at this frame)
+            active_hit = None
+            next_hit = None
+            
+            for i, (hit_frame, is_upper, landing_frame, landing_pos) in enumerate(hit_sequence):
+                if hit_frame <= frame_idx:
+                    active_hit = (hit_frame, is_upper, landing_frame, landing_pos)
+                    
+                    # Find the next hit
+                    if i + 1 < len(hit_sequence):
+                        next_hit = hit_sequence[i + 1]
+                else:
+                    break
+            
+            # No active hit yet or active hit is from upper player
+            if active_hit is None or active_hit[1]:  # is_upper
+                output_frames[frame_idx] = frame.copy()
+                continue
+            
+            # We have an active hit from lower player - show heatmap for its landing point
+            hit_frame, is_upper, landing_frame, landing_pos = active_hit
+            landing_x, landing_y = landing_pos
+            
+            # Only show heatmap for landings in upper part of court
+            if landing_y >= (net_y - self.court_start_y):
+                output_frames[frame_idx] = frame.copy()
+                continue
+            
+            # Calculate frame range where this heatmap should be visible
+            # From current hit to next hit (or end of frames)
+            end_frame = len(frames)
+            if next_hit:
+                end_frame = min(end_frame, next_hit[0])
+            
+            # Create heatmap for this single landing point with fade-in effect
+            frames_since_hit = frame_idx - hit_frame
+            
+            # Apply fade-in effect
+            if frames_since_hit < fade_frames:
+                intensity = min(1.0, frames_since_hit / fade_frames)
+            else:
+                intensity = 1.0
+            
+            heatmap = np.zeros((court_height, court_width), dtype=np.float32)
+            
+            # Add the single point to heatmap
+            point_map = np.zeros((court_height, court_width), dtype=np.float32)
+            point_map[landing_y, landing_x] = intensity
+            
+            # Apply Gaussian blur
+            point_map = cv2.GaussianBlur(point_map, (0, 0), sigma)
+            
+            # Add to heatmap
+            heatmap += point_map
+            
+            # Finalize and display heatmap
+            if np.max(heatmap) > 0:
+                # Normalize heatmap to range 0-1
+                heatmap = heatmap / np.max(heatmap)
+                
+                # Apply colormap
+                heatmap_colored = cv2.applyColorMap((heatmap * 255).astype(np.uint8), color_map)
+                
+                # Create mask for overlay
+                result = frame.copy()
+                mask = np.zeros_like(result)
+                
+                # Apply heatmap only to upper court
+                mask[
+                    self.court_start_y:net_y,
+                    self.court_start_x:self.court_end_x
+                ] = heatmap_colored[0:(net_y-self.court_start_y), :]
+                
+                # Blend with original frame
+                cv2.addWeighted(mask, alpha, result, 1, 0, result)
+                output_frames[frame_idx] = result
+            else:
+                output_frames[frame_idx] = frame.copy()
+        
+        return output_frames
+    
+
+    def create_player_heatmap_animation(self, player_mini_court_detections, output_path="/output/animations/player_heatmap_animation.mp4", 
                             resolution=20, color_map=cv2.COLORMAP_HOT, alpha=0.6, fps=15):
         """
-        Creates an animation showing only the tennis court and dynamic heatmap.
+        Creates an animation showing only the tennis court and dynamic distance-based heatmap.
         
         Parameters:
         player_mini_court_detections - Player positions for each frame
@@ -515,6 +833,228 @@ class MiniCourt():
             # Write frame to video
             video_writer.write(result)
 
+        # Release the writer
+        video_writer.release()
+        
+        return output_path
+    
+    def create_ball_heatmap_animation(self, player_mini_court_detections, ball_mini_court_detections, landing_frames, 
+                                    player_hit_frames, output_path="output/animations/ball_heatmap_animation.mp4",
+                                    sigma=15, color_map=cv2.COLORMAP_HOT, alpha=0.7, fps=15):
+        """
+        Creates an animation showing the mini-court with players, shot trajectories, and ball landing heatmap.
+        Uses the same visual style and logic as the mini_court visualization in the main video.
+        
+        Parameters:
+        player_mini_court_detections - Player positions for each frame
+        ball_mini_court_detections - Ball positions for each frame
+        landing_frames - List of frame indices where the ball hits the ground
+        player_hit_frames - List of frame indices where the lower player hits the ball
+        output_path - Path where to save the animation
+        sigma - Standard deviation for Gaussian blur (controls the spread of each landing point)
+        color_map - OpenCV color map to use for visualization
+        alpha - Heatmap transparency
+        fps - Frames per second of the animation
+        """
+        # Create a video writer
+        width = self.drawing_rectangle_width
+        height = self.drawing_rectangle_height
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        
+        # Find the y position of the net (mid-court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+        
+        # Court dimensions
+        court_width = self.court_end_x - self.court_start_x
+        court_height = self.court_end_y - self.court_start_y
+        
+        # Determine the sequence of hits (who hit when) and their landing points
+        hit_sequence = []
+        
+        # Process all landing frames to detect hits
+        for i, landing_frame in enumerate(landing_frames):
+            if i == 0:
+                continue  # Skip first landing as we don't know who hit before it
+                    
+            # Find the previous landing
+            prev_landing = landing_frames[i-1]
+            
+            # Determine mid-point or most likely frame where ball was hit after previous landing
+            hit_frame = prev_landing + max(1, (landing_frame - prev_landing) // 3)
+            
+            # Find who hit the ball (closest player to ball)
+            if hit_frame < len(player_mini_court_detections) and hit_frame < len(ball_mini_court_detections):
+                if 1 in ball_mini_court_detections[hit_frame]:
+                    ball_pos = ball_mini_court_detections[hit_frame][1]
+                    
+                    # Find closest player and check if they're above or below net
+                    min_dist = float('inf')
+                    closest_player_pos = None
+                    closest_player_y = None
+                    
+                    for player_id, position in player_mini_court_detections[hit_frame].items():
+                        if position is not None:
+                            dist = euclidean_distance(position, ball_pos)
+                            if dist < min_dist:
+                                min_dist = dist
+                                closest_player_pos = position
+                                closest_player_y = position[1]
+                    
+                    if closest_player_y is not None:
+                        # Add to hit sequence: hit_frame, is_upper_player, landing_frame, player_pos, landing_pos
+                        is_upper_player = closest_player_y < net_y
+                        
+                        # Get the landing position
+                        landing_pos = None
+                        if landing_frame < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[landing_frame]:
+                            landing_pos = ball_mini_court_detections[landing_frame][1]
+                            landing_x = int(landing_pos[0]) - self.court_start_x
+                            landing_y = int(landing_pos[1]) - self.court_start_y
+                            
+                            # Only consider valid landings
+                            if 0 <= landing_x < court_width and 0 <= landing_y < court_height:
+                                hit_sequence.append((hit_frame, is_upper_player, landing_frame, closest_player_pos, (landing_x, landing_y)))
+        
+        # Sort hits by frame number
+        hit_sequence.sort(key=lambda x: x[0])
+        
+        # For each frame in the animation sequence
+        frame_count = len(ball_mini_court_detections)
+        for frame_idx in range(frame_count):
+            # Create a blank black image for the court background
+            court_image = np.zeros((height, width, 3), dtype=np.uint8)
+            
+            # Apply mini_court.draw_mini_court
+            # Draw court lines (white)
+            for line in self.lines:
+                start_point = (int(self.drawing_key_points[line[0]*2]) - self.start_x, 
+                            int(self.drawing_key_points[line[0]*2+1]) - self.start_y)
+                end_point = (int(self.drawing_key_points[line[1]*2]) - self.start_x, 
+                        int(self.drawing_key_points[line[1]*2+1]) - self.start_y)
+                cv2.line(court_image, start_point, end_point, (255, 255, 255), 2)
+
+            # Draw the net (purple)
+            net_start_point = (self.drawing_key_points[0] - self.start_x, 
+                            int((self.drawing_key_points[1] + self.drawing_key_points[5])/2) - self.start_y)
+            net_end_point = (self.drawing_key_points[2] - self.start_x, 
+                        int((self.drawing_key_points[1] + self.drawing_key_points[5])/2) - self.start_y)
+            cv2.line(court_image, net_start_point, net_end_point, (255, 0, 255), 2)
+            
+            # Find the active hit (the most recent hit before or at this frame)
+            active_hit = None
+            next_hit = None
+            
+            for i, (hit_frame, is_upper, landing_frame, player_pos, landing_pos) in enumerate(hit_sequence):
+                if hit_frame <= frame_idx:
+                    active_hit = (hit_frame, is_upper, landing_frame, player_pos, landing_pos)
+                    
+                    # Find the next hit
+                    if i + 1 < len(hit_sequence):
+                        next_hit = hit_sequence[i + 1]
+                else:
+                    break
+            
+            # No active hit yet or active hit is from upper player
+            # Apply mini_court.draw_ball_landing_heatmap logic
+            if active_hit is not None and not active_hit[1]:  # not is_upper (from lower player)
+                hit_frame, is_upper, landing_frame, player_pos, landing_pos = active_hit
+                landing_x, landing_y = landing_pos
+                
+                # Only show heatmap for landings in upper part of court
+                if landing_y < (net_y - self.court_start_y):
+                    # Create heatmap for this single landing point
+                    frames_since_hit = frame_idx - hit_frame
+                    
+                    # Apply fade-in effect (only for 60 frames)
+                    fade_frames = 60
+                    if frames_since_hit < fade_frames:
+                        intensity = min(1.0, frames_since_hit / fade_frames)
+                    else:
+                        intensity = 1.0
+                    
+                    heatmap = np.zeros((court_height, court_width), dtype=np.float32)
+                    
+                    # Add the single point to heatmap
+                    point_map = np.zeros((court_height, court_width), dtype=np.float32)
+                    point_map[landing_y, landing_x] = intensity
+                    
+                    # Apply Gaussian blur
+                    point_map = cv2.GaussianBlur(point_map, (0, 0), sigma)
+                    
+                    # Add to heatmap
+                    heatmap += point_map
+                    
+                    # Finalize and display heatmap
+                    if np.max(heatmap) > 0:
+                        # Normalize heatmap to range 0-1
+                        heatmap = heatmap / np.max(heatmap)
+                        
+                        # Apply colormap
+                        heatmap_colored = cv2.applyColorMap((heatmap * 255).astype(np.uint8), color_map)
+                        
+                        # Create mask for overlay
+                        mask = np.zeros_like(court_image)
+                        
+                        # Apply heatmap only to upper court
+                        mask[
+                            self.court_start_y - self.start_y:net_y - self.start_y,
+                            self.court_start_x - self.start_x:self.court_end_x - self.start_x
+                        ] = heatmap_colored[0:(net_y-self.court_start_y), :]
+                        
+                        # Blend with original frame
+                        cv2.addWeighted(mask, alpha, court_image, 1, 0, court_image)
+            
+            # Apply mini_court.draw_shot_trajectories logic
+            for hit_frame, is_upper, landing_frame, player_pos, landing_pos in hit_sequence:
+                # Only show trajectories from lower player hits
+                if not is_upper and hit_frame <= frame_idx <= landing_frame:
+                    # Landing position is already in relative coordinates to court_start
+                    landing_x, landing_y = landing_pos
+                    landing_x_abs = int(landing_x + self.court_start_x - self.start_x)
+                    landing_y_abs = int(landing_y + self.court_start_y - self.start_y)
+                    
+                    # Check if the landing position is in the upper part of the court
+                    if landing_y < (net_y - self.court_start_y):
+                        # Player position is in absolute coordinates
+                        player_x, player_y = int(player_pos[0]) - self.start_x, int(player_pos[1]) - self.start_y
+                        
+                        # Draw the landing point
+                        cv2.circle(court_image, (landing_x_abs, landing_y_abs), 5, (0, 255, 255), -1)
+                        
+                        # Draw dotted line from player to landing position
+                        line_length = np.sqrt((landing_x_abs - player_x)**2 + (landing_y_abs - player_y)**2)
+                        num_segments = int(line_length / 10)  # One segment every ~10 pixels
+                        
+                        if num_segments > 1:
+                            # Create points along the line
+                            for i in range(num_segments):
+                                t = i / (num_segments - 1)
+                                dot_x = int(player_x + t * (landing_x_abs - player_x))
+                                dot_y = int(player_y + t * (landing_y_abs - player_y))
+                                
+                                # Draw a small line segment (dot) at this position
+                                if i % 2 == 0:  # Skip every other segment for dotted effect
+                                    cv2.circle(court_image, (dot_x, dot_y), 1, (0, 255, 255), 2)
+            
+            # Draw ball current position
+            if frame_idx < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[frame_idx]:
+                ball_pos = ball_mini_court_detections[frame_idx][1]
+                ball_x, ball_y = int(ball_pos[0]) - self.start_x, int(ball_pos[1]) - self.start_y
+                if 0 <= ball_x < width and 0 <= ball_y < height:
+                    cv2.circle(court_image, (ball_x, ball_y), 4, (0, 255, 255), -1)
+            
+            # Draw players
+            if frame_idx < len(player_mini_court_detections):
+                for player_id, position in player_mini_court_detections[frame_idx].items():
+                    if position is not None:
+                        x, y = int(position[0]) - self.start_x, int(position[1]) - self.start_y
+                        if 0 <= x < width and 0 <= y < height:
+                            cv2.circle(court_image, (x, y), 5, (255, 255, 0), -1)
+            
+            # Write frame to video
+            video_writer.write(court_image)
+        
         # Release the writer
         video_writer.release()
         
