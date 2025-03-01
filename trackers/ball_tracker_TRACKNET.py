@@ -91,14 +91,3 @@ class BallTrackerNet(nn.Module):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0)    
     
-
-'''   
-if __name__ == '__main__':
-    device = 'cpu'
-    model = BallTrackerNet().to(device)
-    inp = torch.rand(1, 9, 360, 640)
-    out = model(inp)
-    print('out = {}'.format(out.shape))
-'''
-    
-    

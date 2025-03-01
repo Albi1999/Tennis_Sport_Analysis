@@ -1,5 +1,5 @@
-from utils import (read_video, save_video, postprocess, infer_model, remove_outliers, split_track, interpolation, write_track, convert_mp4_to_mp3)
-from trackers import (PlayerTracker, BallTracker,BallTrackerNet)
+from utils import (read_video, save_video, infer_model, remove_outliers, split_track, interpolation, write_track, convert_mp4_to_mp3, get_ball_shot_frames_audio, draw_ball_hits)
+from trackers import (PlayerTracker, BallTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from court_line_detector import CourtLineDetector
 import cv2 
@@ -15,7 +15,7 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    video_number = 101
+    video_number = 102
     input_video_path = f'data/input_video{video_number}.mp4'  # Toy example
     #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
     
@@ -27,13 +27,15 @@ def main():
 
     # Initialize Tracker for Players & Ball
     player_tracker = PlayerTracker(model_path = 'models/yolov8x.pt')
-    ball_tracker_method = 'yolo' # 'yolo' or 'tracknet'
+    ball_tracker_method = 'tracknet' # 'yolo' or 'tracknet'
     
     if ball_tracker_method == 'yolo':
         ball_tracker = BallTracker(model_path = 'models/yolo11best.pt') # TODO : try yolo11last aswell as finetuning on more self annotated data (retrain model)
     elif ball_tracker_method == 'tracknet':
-        ball_tracker_TRACKNET = BallTrackerNet()
-        ball_tracker_TRACKNET.load_state_dict(torch.load('models/tracknet_best.pt', map_location= device))
+        ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
+
+        saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location= device)
+        ball_tracker_TRACKNET.load_state_dict(saved_state_dict['model_state'])
         ball_tracker_TRACKNET.to(device)
         ball_tracker_TRACKNET.eval()
         
@@ -47,18 +49,18 @@ def main():
     
 
     # Read in video
-    video_frames, fps = read_video(input_video_path)
+    video_frames, fps, video_width, video_height = read_video(input_video_path)
 
     # Detect & Track Players
     player_detections = player_tracker.detect_frames(video_frames,
-                                                     read_from_stub = True,
+                                                     read_from_stub = False,
                                                      stub_path = 'tracker_stubs/player_detections.pkl')
 
     
     # Detect Ball 
     if ball_tracker_method == 'yolo':
         ball_detections = ball_tracker.detect_frames(video_frames,
-                                                    read_from_stub = True,
+                                                    read_from_stub = False,
                                                     stub_path = 'tracker_stubs/ball_detections.pkl')
         # Interpolate the missing tracking positions for the ball
         ball_detections = ball_tracker.interpolate_ball_positions(ball_detections)
@@ -71,13 +73,20 @@ def main():
 
 
     elif ball_tracker_method == 'tracknet':
-        ball_detections, dists = infer_model(video_frames, ball_tracker_TRACKNET)
+        # Calculate the correct scale factor for scaling back 
+        # with TrackNet, we scaled to 640 width, 360 height
+        scaling_x = video_width/640
+        scaling_y = video_height/360
+        ball_detections, dists = infer_model(video_frames, ball_tracker_TRACKNET, scale = (scaling_x, scaling_y))
         ball_detections = remove_outliers(ball_detections, dists)
         subtracks = split_track(ball_detections)
         for r in subtracks:
             ball_subtrack = ball_detections[r[0]:r[1]]
             ball_subtrack = interpolation(ball_subtrack)
             ball_detections[r[0]:r[1]] = ball_subtrack
+    
+        if AUDIO:
+            ball_shots_frames = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = False)
 
 
 
@@ -90,6 +99,9 @@ def main():
 
     
     #print(f"Player detections: {player_detections[40][1]}")    # Example of how to access player detections at frame 40
+
+
+    '''
 
     # Initialize MiniCourt
     mini_court = MiniCourt(video_frames[0])
@@ -108,8 +120,11 @@ def main():
     heatmap_animation_path = mini_court.create_heatmap_animation(player_mini_court_detections,
                                                                 output_path=f"output/animations/heatmap_animation{video_number}.mp4")
     print(f"Heatmap animation saved to: {heatmap_animation_path}")
-
+    '''
+    
     # Draw Output
+
+  
 
     # Draw bounding boxes around players + their IDs
     output_frames = player_tracker.draw_bboxes(video_frames, player_detections)
@@ -122,18 +137,22 @@ def main():
         output_frames = ball_tracker.draw_ball_hits(output_frames, ball_shots_frames)
     elif ball_tracker_method == 'tracknet':
         output_frames = write_track(output_frames, ball_detections)
+        output_frames = draw_ball_hits(output_frames, ball_shots_frames)
     
     # Draw keypoints, according to the first frame
     output_frames = courtline_detector.draw_keypoints_on_video(output_frames, courtline_keypoints)
-
+    
+ 
+    '''
     # Draw Mini Court
     if DRAW_MINI_COURT:
         output_frames = mini_court.draw_mini_court(output_frames)
         output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections)
         output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
         output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
-
     
+    
+    '''
     # Draw frame number (top left corner)
     for i, frame in enumerate(output_frames):
         cv2.putText(frame, f"Frame n {i}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
@@ -141,6 +160,7 @@ def main():
     # Save video
     save_video(output_frames, output_video_path, fps)
 
+  
 
 if __name__ == '__main__':
     main()

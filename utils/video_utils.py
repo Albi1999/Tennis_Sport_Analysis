@@ -17,6 +17,8 @@ def read_video(video_path): # TODO : read in fps I think so we can reuse
 
     cap = cv2.VideoCapture(video_path)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     frames = []
 
@@ -32,7 +34,7 @@ def read_video(video_path): # TODO : read in fps I think so we can reuse
     # Releasing the capture object (no frames left)
     cap.release()
 
-    return frames, fps 
+    return frames, fps, width, height 
 
 
 
