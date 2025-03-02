@@ -27,7 +27,7 @@ def main():
 
     # Initialize Tracker for Players & Ball
     player_tracker = PlayerTracker(model_path = 'models/yolov8x.pt')
-    ball_tracker_method = 'yolo' # 'yolo' or 'tracknet'
+    ball_tracker_method = 'tracknet' # 'yolo' or 'tracknet'
     
     if ball_tracker_method == 'yolo':
         ball_tracker = BallTracker(model_path = 'models/yolo11best.pt') # TODO : try yolo11last aswell as finetuning on more self annotated data (retrain model)
@@ -86,8 +86,8 @@ def main():
             ball_shots_frames = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = False)
         
         # TODO: Convert ball detections to bounding boxes
-        ball_detections = convert_ball_detection_to_bbox(ball_detections)
-        print(f"Ball detections: {ball_detections[40]}")    # Example of how to access ball detections at frame 40
+        ball_detections_bboxes = convert_ball_detection_to_bbox(ball_detections)
+        print(f"Ball detections: {ball_detections[40]}")    # Example of how to access ball detections at frame 40 (gives (x,y) coordinate)
             
     
 
@@ -124,7 +124,7 @@ def main():
     
     # Convert player positions to mini court positions
     player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
-                                                                                                                            ball_detections,
+                                                                                                                            ball_detections_bboxes,
                                                                                                                             courtline_keypoints,
                                                                                                                             chosen_players_ids)
     
@@ -188,7 +188,7 @@ def main():
         )     
                   
         output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
-        output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
+      #  output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
 
     
 

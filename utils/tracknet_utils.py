@@ -9,6 +9,7 @@ import librosa
 import numpy as np 
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, butter, sosfilt
+from collections import defaultdict
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -150,7 +151,7 @@ def write_track(frames, ball_track, trace = 7):
                 if ball_track[num-i][0]:
                     x = int(ball_track[num-i][0])
                     y = int(ball_track[num-i][1])
-                    frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness=10-i)
+                    frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness=8-i)
                     
                 else:
                     break
@@ -159,34 +160,8 @@ def write_track(frames, ball_track, trace = 7):
     
 
 
-def write_track_og(frames, ball_track, path_output_video, fps, trace=15):
-    """ Write .avi file with detected ball tracks
-    :params
-        frames: list of original video frames
-        ball_track: list of ball coordinates
-        path_output_video: path to output video
-        fps: frames per second
-        trace: draws a trace of the ball (int of how many frames to draw it in)
-    """
-    height, width = frames[0].shape[:2]
-    out = cv2.VideoWriter(path_output_video, cv2.VideoWriter_fourcc(*'mp4v'), 
-                          fps, (width, height))
-    for num in range(len(frames)):
-        frame = frames[num]
-        for i in range(trace):
-            if (num-i > 0):
-                if ball_track[num-i][0]:
-                    x = int(ball_track[num-i][0])
-                    y = int(ball_track[num-i][1])
-                    frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness=10-i)
-                else:
-                    break
-        out.write(frame) 
-    out.release()  
 
-
-
-def get_ball_shot_frames_audio(audio_file, fps, plot=False):
+def get_ball_shot_frames_audio(audio_file, fps, plot=True):
     # Load the audio file
     y, sr = librosa.load(audio_file, sr=None)
     
@@ -260,6 +235,12 @@ def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     return hit_frames 
 
 
+def get_ball_ground_hit_frames_audio(video_frames, audio_file, fps, plot = True):
+    pass 
+
+
+
+
 
 def draw_ball_hits(video_frames, hit_frames):
 
@@ -276,13 +257,25 @@ def draw_ball_hits(video_frames, hit_frames):
     return output_video_frames 
 
 def convert_ball_detection_to_bbox(ball_track, padding=5):
-    """ Convert ball detection to bounding box format"""
-    bboxes = []
+    """ Convert ball detection to bounding box format, similar as in YOLO implementation.
+        Therefore, we want to return a list of dictionaries (one for each frame), with
+        format 1 : [x_min, y_min, x_max, y_max]"""
+    
+    lst_of_bboxes = []
+    
+    # Iterate over all TrackNet (x,y) coordinates
+    # len(ball_track) --> number of frames
+
     for i in range(len(ball_track)):
+        bboxes = {}
         if ball_track[i][0]:
             x = ball_track[i][0]
             y = ball_track[i][1]
-            bboxes.append([x-padding, y-padding, x+padding, y+padding])
-        else:
-            bboxes.append(None)
-    return bboxes
+            # key 1 and values x_min, y_min, x_max, y_max
+            bboxes[1] = [x-padding, y-padding, x+padding, y+padding]
+        else: # Draw somewhere out of image # TODO : check if works / make more consistent
+            bboxes[1] = [6000,6000,6000,6000]
+        
+        lst_of_bboxes.append(bboxes)
+
+    return lst_of_bboxes
