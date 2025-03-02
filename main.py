@@ -1,4 +1,4 @@
-from utils import (read_video, save_video, infer_model, remove_outliers, split_track, interpolation, write_track, convert_mp4_to_mp3, get_ball_shot_frames_audio, draw_ball_hits, convert_ball_detection_to_bbox)
+from utils import (read_video, save_video, infer_model, remove_outliers, split_track, combine_visual_audio, interpolation, write_track, get_ball_shot_frames_audio, convert_mp4_to_mp3,draw_ball_hits, convert_ball_detection_to_bbox, get_ball_shot_frames_new)
 from trackers import (PlayerTracker, BallTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from court_line_detector import CourtLineDetector
@@ -15,7 +15,7 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    video_number = 101
+    video_number = 100
     input_video_path = f'data/input_video{video_number}.mp4'  # Toy example
     #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
     
@@ -27,7 +27,7 @@ def main():
 
     # Initialize Tracker for Players & Ball
     player_tracker = PlayerTracker(model_path = 'models/yolov8x.pt')
-    ball_tracker_method = 'tracknet' # 'yolo' or 'tracknet'
+    ball_tracker_method = 'yolo' # 'yolo' or 'tracknet'
     
     if ball_tracker_method == 'yolo':
         ball_tracker = BallTracker(model_path = 'models/yolo11best.pt') # TODO : try yolo11last aswell as finetuning on more self annotated data (retrain model)
@@ -50,20 +50,21 @@ def main():
 
     # Detect & Track Players
     player_detections = player_tracker.detect_frames(video_frames,
-                                                     read_from_stub = True,
+                                                     read_from_stub = False,
                                                      stub_path = 'tracker_stubs/player_detections.pkl')
 
     
     # Detect Ball 
     if ball_tracker_method == 'yolo':
         ball_detections = ball_tracker.detect_frames(video_frames,
-                                                    read_from_stub = True,
+                                                    read_from_stub = False,
                                                     stub_path = 'tracker_stubs/ball_detections.pkl')
         # Interpolate the missing tracking positions for the ball
         ball_detections = ball_tracker.interpolate_ball_positions(ball_detections)
 
+
         if AUDIO:
-            ball_shots_frames = ball_tracker.get_ball_shot_frames_audio(input_video_path_audio, fps, plot = False)
+            ball_shots_frames_audio = ball_tracker.get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
 
 
 
@@ -83,10 +84,12 @@ def main():
             ball_detections[r[0]:r[1]] = ball_subtrack
     
         if AUDIO:
-            ball_shots_frames = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = False)
+            ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
+            
         
-        # TODO: Convert ball detections to bounding boxes
-        ball_detections_bboxes = convert_ball_detection_to_bbox(ball_detections)
+        # Copy TrackNet ball_detections
+        ball_detections_tracknet = ball_detections.copy()
+        ball_detections = convert_ball_detection_to_bbox(ball_detections)
         print(f"Ball detections: {ball_detections[40]}")    # Example of how to access ball detections at frame 40 (gives (x,y) coordinate)
             
     
@@ -120,14 +123,21 @@ def main():
     # List of frames where ball hits the ground
     ball_landing_frames = [45, 75, 102, 130, 165, 194, 223, 255, 296, 324] # Hardcoded for now
     print(f"Ball landing frames: {ball_landing_frames}")
-   
+
     
     # Convert player positions to mini court positions
     player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
-                                                                                                                            ball_detections_bboxes,
+                                                                                                                            ball_detections,
                                                                                                                             courtline_keypoints,
                                                                                                                             chosen_players_ids)
     
+    # Check the racket hits
+
+    ball_shots_frames = get_ball_shot_frames_new(ball_mini_court_detections)
+
+    ball_shots_frames = combine_visual_audio(ball_shots_frames, ball_shots_frames_audio)
+
+
     # Player Heatmap Animation
     player_heatmap_animation_path = mini_court.create_player_heatmap_animation(player_mini_court_detections,
                                                                 output_path=f"output/animations/player_heatmap_animation{video_number}.mp4")
@@ -158,7 +168,7 @@ def main():
         output_frames = ball_tracker.draw_bboxes(output_frames, ball_detections)
         output_frames = ball_tracker.draw_ball_hits(output_frames, ball_shots_frames)
     elif ball_tracker_method == 'tracknet':
-        output_frames = write_track(output_frames, ball_detections)
+        output_frames = write_track(output_frames, ball_detections_tracknet)
         output_frames = draw_ball_hits(output_frames, ball_shots_frames)
     
     # Draw keypoints, according to the first frame

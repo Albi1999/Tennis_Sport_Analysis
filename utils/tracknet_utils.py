@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, butter, sosfilt
 from collections import defaultdict
+from utils import euclidean_distance
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -159,6 +160,49 @@ def write_track(frames, ball_track, trace = 7):
     return output_video_frames
     
 
+import pandas as pd
+import matplotlib.pyplot as plt
+def get_ball_shot_frames_new(ball_positions_minicourt):
+    """Based on change of direction in the mini court coordinates"""
+
+    # TODO : see how we can optimize : the constants such as window & minimum_change_frames, is there smth better, maybe work with frames and 
+    # how distant hits are from each other in a tennis match
+
+    ball_positions = [x.get(1,[]) for x in ball_positions_minicourt]
+    df_ball_positions = pd.DataFrame(ball_positions,columns=['x','y'])
+    # Create a rolling window for the y positions
+    df_ball_positions['y_rolling_mean'] = df_ball_positions['y'].rolling(window=3, min_periods=1, center=False).mean()
+    df_ball_positions['delta_y'] = df_ball_positions['y_rolling_mean'].diff()
+    df_ball_positions['ball_hit'] = 0
+
+    plt.plot(df_ball_positions['delta_y'])
+    plt.savefig("SHOTS.png")
+
+    minimum_change_frames_for_hit = 20 # for this amount of frames it has to keep the changed direction
+                                       # to be considered a hit
+    for i in range(1,len(df_ball_positions)- int(minimum_change_frames_for_hit*1.2) ):
+        negative_position_change = df_ball_positions['delta_y'].iloc[i] >0 and df_ball_positions['delta_y'].iloc[i+1] <0
+        positive_position_change = df_ball_positions['delta_y'].iloc[i] <0 and df_ball_positions['delta_y'].iloc[i+1] >0
+
+        if negative_position_change or positive_position_change:
+            change_count = 0 
+            for change_frame in range(i+1, i+int(minimum_change_frames_for_hit*1.2)+1):
+                negative_position_change_following_frame = df_ball_positions['delta_y'].iloc[i] >0 and df_ball_positions['delta_y'].iloc[change_frame] <0
+                positive_position_change_following_frame = df_ball_positions['delta_y'].iloc[i] <0 and df_ball_positions['delta_y'].iloc[change_frame] >0
+
+                if negative_position_change and negative_position_change_following_frame:
+                    change_count+=1
+                elif positive_position_change and positive_position_change_following_frame:
+                    change_count+=1
+        
+            if change_count>minimum_change_frames_for_hit-1:
+                df_ball_positions['ball_hit'].iloc[i] = 1
+
+    hit_frames = df_ball_positions[df_ball_positions['ball_hit']==1].index.tolist()
+
+    return hit_frames
+    
+
 
 
 def get_ball_shot_frames_audio(audio_file, fps, plot=True):
@@ -235,8 +279,41 @@ def get_ball_shot_frames_audio(audio_file, fps, plot=True):
     return hit_frames 
 
 
-def get_ball_ground_hit_frames_audio(video_frames, audio_file, fps, plot = True):
-    pass 
+def combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps):
+    """ 
+    Idea is :
+        The first hit in each game is very loud and not registered by the "change of direction"
+        logic --> therefore we detect it with audio. Even if the game starts in the middle,
+        since we work on a set, it should still be okay, but with this we catch the possible
+        first hit.
+        Audio signals give us a more clear point of where the ball was really hit : Therefore
+        we want to use these frames as our reference points
+    """
+    
+    # use a set to not have any duplicates
+    ball_shots_frames_final = set()
+
+    # Add initial hit
+    ball_shots_frames_final.add(ball_shots_frames_audio[0])
+
+    # We now iterate through the found direction changes and see if we can find
+    # a close frame hit also in the audio
+    for i in ball_shots_frames:
+        for j in ball_shots_frames_audio:
+            if i - 10 < j < i + 10:
+                ball_shots_frames_final.add(j)
+
+    # Next, we need to take into account that there will be more silent hits that our audio model might not recognize, but are recognized by the change of direction model
+    # Therefore, we check if we have large gaps in the audio results where we have some results of the change of direction model
+
+    # In a "normal" ball exchange, we can say that there is roughly one hit per second (# TODO : check), thus in frames exactly our fps 
+    # Therefore, we check for each value in ball_shots_frames, if there is no frame in ball_shots_frames_audio in fps distance, then we should also take that frame
+    # TODO : implement
+
+
+
+    
+    return ball_shots_frames_final
 
 
 
