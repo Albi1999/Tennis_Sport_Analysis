@@ -1,4 +1,5 @@
 import cv2
+import os
 import numpy as np
 import sys
 sys.path.append('../')
@@ -17,10 +18,10 @@ from utils import (
 
 class MiniCourt():
     def __init__(self,frame):
-        self.drawing_rectangle_width = 100          # Width of the mini court in pixels (depends on the image size)
-        self.drawing_rectangle_height = 200         # Height of the mini court in pixels (depends on the image size)
+        self.drawing_rectangle_width = 250          # Width of the mini court in pixels (depends on the image size)
+        self.drawing_rectangle_height = 500         # Height of the mini court in pixels (depends on the image size)
         self.buffer = 50                            # Distance from the right and top of the frame to the mini court
-        self.padding_court= 10                      # Padding from the mini court to the court (depends on the image size)
+        self.padding_court= 50                      # Padding from the mini court to the court (depends on the image size)
 
         # Define the mini court in the frame
         self.set_canvas_background_box_position(frame)
@@ -717,50 +718,68 @@ class MiniCourt():
         return output_frames
     
 
-    def create_player_heatmap_animation(self, player_mini_court_detections, output_path="/output/animations/player_heatmap_animation.mp4", 
-                            resolution=20, color_map=cv2.COLORMAP_HOT, alpha=0.6, fps=15):
+    def create_player_heatmap_animation(self, player_mini_court_detections, ball_mini_court_detections=None, 
+                                    output_path="output/animations/player_heatmap_animation.mp4", 
+                                    player_sigma=10, color_map=cv2.COLORMAP_HOT, alpha=0.7, fps=15,
+                                    draw_players=True, player_reach_threshold=0.25, easy_reach_threshold=0.1, save_mask=False, 
+                                    mask_path="output/masks/player_heatmap_mask.npy"):
         """
-        Creates an animation showing only the tennis court and dynamic distance-based heatmap.
-        
+        Creates an animation showing only the player distance heatmap on the mini-court.
+
         Parameters:
         player_mini_court_detections - Player positions for each frame
-        output_path - Path where to save the animation
-        resolution - Grid resolution for the heatmap
-        color_map - OpenCV color map to use
+        ball_mini_court_detections - Ignored, present only for compatibility with other functions
+        output_path - Path to save the animation
+        player_sigma - Standard deviation for Gaussian blur of the heatmap
+        color_map - OpenCV color map to use for visualization
         alpha - Heatmap transparency
         fps - Frames per second of the animation
+        draw_players - Whether to draw player positions
+        player_reach_threshold - Threshold to determine the "easy reach" distance for players
+        easy_reach_threshold - Threshold to identify easily reachable areas
+        save_mask - Whether to save raw heatmap data
+        mask_path - Path to save the heatmap data
+
+        Returns:
+        output_path - Path of the created animation
+        mask_data - Raw heatmap data if save_mask is True
         """
-        # Create grid dimensions
-        grid_height = resolution
-        grid_width = resolution
-
-        # Calculate step sizes
-        x_step = self.court_drawing_width / grid_width
-        y_step = (self.court_end_y - self.court_start_y) / grid_height
-
-        # Find the y position of the net (mid-court)
-        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
-
-        # Maximum possible distance for normalization
-        max_distance = np.sqrt(self.court_drawing_width**2 + (net_y - self.court_start_y)**2)
-
-        # Create a video writer
+        # Create the video writer
         width = self.drawing_rectangle_width
         height = self.drawing_rectangle_height
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-
-        # For each frame, create a specific heatmap
-        for frame_idx, frame_player_positions in enumerate(player_mini_court_detections):
-            # Create an empty black image
+        
+        # Find the y position of the net (mid-court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+        
+        # Court dimensions
+        court_width = self.court_end_x - self.court_start_x
+        court_height = self.court_end_y - self.court_start_y
+        
+        # Upper court dimensions
+        upper_court_height = net_y - self.court_start_y
+        upper_court_width = self.court_drawing_width
+        
+        # Space for heatmap data if requested
+        if save_mask:
+            mask_data = []
+        
+        # Maximum possible distance for normalization
+        max_distance = np.sqrt(self.court_drawing_width**2 + (net_y - self.court_start_y)**2)
+        
+        # For each frame, create the heatmap
+        frame_count = len(player_mini_court_detections)
+        for frame_idx in range(frame_count):
+            # Create an empty image for the court
             court_image = np.zeros((height, width, 3), dtype=np.uint8)
             
-            # Draw court lines (white)
+            # Draw the court lines (white)
             for line in self.lines:
                 start_point = (int(self.drawing_key_points[line[0]*2]) - self.start_x, 
                             int(self.drawing_key_points[line[0]*2+1]) - self.start_y)
                 end_point = (int(self.drawing_key_points[line[1]*2]) - self.start_x, 
-                            int(self.drawing_key_points[line[1]*2+1]) - self.start_y)
+                        int(self.drawing_key_points[line[1]*2+1]) - self.start_y)
                 cv2.line(court_image, start_point, end_point, (255, 255, 255), 2)
 
             # Draw the net (purple)
@@ -769,81 +788,94 @@ class MiniCourt():
             net_end_point = (self.drawing_key_points[2] - self.start_x, 
                         int((self.drawing_key_points[1] + self.drawing_key_points[5])/2) - self.start_y)
             cv2.line(court_image, net_start_point, net_end_point, (255, 0, 255), 2)
-
-            # Create the grid for this frame's heatmap
-            heatmap_grid = np.zeros((grid_height, grid_width))
-
-            # For each grid point, calculate distance from nearest player
-            for i in range(grid_width):
-                for j in range(grid_height):
-                    grid_x = self.court_start_x + i * x_step
-                    grid_y = self.court_start_y + j * y_step
-
-                    # Apply heatmap only to upper part of court (above net)
-                    if grid_y >= net_y:
-                        continue  # Skip pixels in lower part
-
-                    min_distance = max_distance
-                    for player_id, position in frame_player_positions.items():
-                        if position is None:
-                            continue
-
-                        player_x, player_y = position
-                        distance = euclidean_distance((grid_x, grid_y), (player_x, player_y))
-                        min_distance = min(min_distance, distance)
-
-                    # Normalize distance between 0 and 1
-                    normalized_distance = min_distance / max_distance
-                    heatmap_grid[j, i] = normalized_distance
-
-            # Apply color map to grid
-            heatmap_colored = cv2.applyColorMap((heatmap_grid * 255).astype(np.uint8), color_map)
-
-            # Resize to court dimensions
-            heatmap_resized = cv2.resize(
-                heatmap_colored, 
-                (self.court_drawing_width, self.court_end_y - self.court_start_y)
-            )
-
-            # Create transparent overlay of heatmap
-            overlay = court_image.copy()
-
-            # Apply heatmap only to upper part of court
-            court_y_offset = self.padding_court
-            court_x_offset = self.padding_court
             
-            overlay[
-                court_y_offset:net_y-self.start_y,
-                court_x_offset:self.court_drawing_width+court_x_offset
-            ] = heatmap_resized[0:(net_y-self.court_start_y), :]
-
-            # Blend overlay with court image
-            result = cv2.addWeighted(overlay, alpha, court_image, 1-alpha, 0)
+            # ----- PLAYER DISTANCE HEATMAP -----
+            # Create the grid for player distance
+            player_heatmap = np.zeros((upper_court_height, upper_court_width), dtype=np.float32)
+            
+            if frame_idx < len(player_mini_court_detections):
+                # Calculate the distance from players for each point in the upper court
+                for y in range(upper_court_height):
+                    for x in range(upper_court_width):
+                        grid_y = self.court_start_y + y
+                        grid_x = self.court_start_x + x
+                        
+                        # Measure the distance from this point to the nearest player
+                        min_distance = max_distance
+                        for player_id, position in player_mini_court_detections[frame_idx].items():
+                            if position is not None:
+                                player_x, player_y = position
+                                distance = euclidean_distance((grid_x, grid_y), (player_x, player_y))
+                                min_distance = min(min_distance, distance)
+                        
+                        # Normalize the distance within [0, 1]
+                        normalized_distance = (min_distance / max_distance)**4
+                        
+                        # Apply threshold to significantly reduce values near players
+                        if (min_distance / max_distance) < player_reach_threshold:
+                            # Apply a sharp drop for points within player reach
+                            normalized_distance *= 0.1
+                        
+                        player_heatmap[y, x] = normalized_distance
+                
+                # Apply Gaussian blur to smooth the heatmap
+                if player_sigma > 0:
+                    player_heatmap = cv2.GaussianBlur(player_heatmap, (0, 0), player_sigma)
+                    
+                # Renormalize to ensure the maximum value is 1
+                if np.max(player_heatmap) > 0:
+                    player_heatmap = player_heatmap / np.max(player_heatmap)
+            
+            # Save raw heatmap data if requested
+            if save_mask:
+                mask_data.append(player_heatmap.copy())
+            
+            # Apply color map to the heatmap
+            colored_heatmap = cv2.applyColorMap((player_heatmap * 255).astype(np.uint8), color_map)
+            
+            # Create a mask for overlay
+            mask = np.zeros_like(court_image)
+            
+            # Apply the heatmap to the upper part of the court
+            mask[
+                self.court_start_y - self.start_y:net_y - self.start_y,
+                self.court_start_x - self.start_x:self.court_end_x - self.start_x
+            ] = colored_heatmap
+            
+            # Blend with the court image
+            cv2.addWeighted(mask, alpha, court_image, 1, 0, court_image)
             
             # Draw players as points
-            for player_id, position in frame_player_positions.items():
-                if position is None:
-                    continue
-                x, y = position
-                x_adj = int(x - self.start_x)
-                y_adj = int(y - self.start_y)
-                if 0 <= x_adj < width and 0 <= y_adj < height:
-                    cv2.circle(result, (x_adj, y_adj), 5, (0, 0, 255), -1)  # Red for players
-
-            # Write frame to video
-            video_writer.write(result)
-
+            if draw_players:
+                for player_id, position in player_mini_court_detections[frame_idx].items():
+                    if position is not None:
+                        x, y = position
+                        x_adj = int(x - self.start_x)
+                        y_adj = int(y - self.start_y)
+                        if 0 <= x_adj < width and 0 <= y_adj < height:
+                            cv2.circle(court_image, (x_adj, y_adj), 5, (255, 255, 0), -1)  # Yellow for players
+            
+            # Write the frame to the video
+            video_writer.write(court_image)
+        
         # Release the writer
         video_writer.release()
         
+        # Save the mask data if requested
+        if save_mask:
+            os.makedirs(os.path.dirname(mask_path), exist_ok=True)
+            np.save(mask_path, np.array(mask_data))
+            return output_path, mask_data
+        
         return output_path
-    
+
+
     def create_ball_heatmap_animation(self, player_mini_court_detections, ball_mini_court_detections, landing_frames, 
                                     player_hit_frames, output_path="output/animations/ball_heatmap_animation.mp4",
-                                    sigma=15, color_map=cv2.COLORMAP_HOT, alpha=0.7, fps=15):
+                                    sigma=8, color_map=cv2.COLORMAP_HOT, alpha=0.7, fps=15, draw_ball=False,
+                                    save_mask=False, mask_path="output/masks/ball_heatmap_mask.npy"):
         """
         Creates an animation showing the mini-court with players, shot trajectories, and ball landing heatmap.
-        Uses the same visual style and logic as the mini_court visualization in the main video.
         
         Parameters:
         player_mini_court_detections - Player positions for each frame
@@ -855,6 +887,13 @@ class MiniCourt():
         color_map - OpenCV color map to use for visualization
         alpha - Heatmap transparency
         fps - Frames per second of the animation
+        draw_ball - Whether to draw the ball position
+        save_mask - Whether to save the raw heatmap data for combining later
+        mask_path - Path where to save the heatmap mask data
+        
+        Returns:
+        output_path - Path to the created animation
+        mask_data - Raw heatmap data if save_mask is True
         """
         # Create a video writer
         width = self.drawing_rectangle_width
@@ -868,6 +907,14 @@ class MiniCourt():
         # Court dimensions
         court_width = self.court_end_x - self.court_start_x
         court_height = self.court_end_y - self.court_start_y
+        
+        # Upper court dimensions (used for mask storage)
+        upper_court_height = net_y - self.court_start_y
+        upper_court_width = self.court_drawing_width
+        
+        # Storage for heatmap masks if needed
+        if save_mask:
+            mask_data = []
         
         # Determine the sequence of hits (who hit when) and their landing points
         hit_sequence = []
@@ -925,7 +972,9 @@ class MiniCourt():
             # Create a blank black image for the court background
             court_image = np.zeros((height, width, 3), dtype=np.uint8)
             
-            # Apply mini_court.draw_mini_court
+            # Create a blank heatmap for this frame
+            upper_court_heatmap = np.zeros((upper_court_height, upper_court_width), dtype=np.float32)
+            
             # Draw court lines (white)
             for line in self.lines:
                 start_point = (int(self.drawing_key_points[line[0]*2]) - self.start_x, 
@@ -955,8 +1004,7 @@ class MiniCourt():
                 else:
                     break
             
-            # No active hit yet or active hit is from upper player
-            # Apply mini_court.draw_ball_landing_heatmap logic
+            # Apply ball_landing_heatmap logic
             if active_hit is not None and not active_hit[1]:  # not is_upper (from lower player)
                 hit_frame, is_upper, landing_frame, player_pos, landing_pos = active_hit
                 landing_x, landing_y = landing_pos
@@ -985,6 +1033,9 @@ class MiniCourt():
                     # Add to heatmap
                     heatmap += point_map
                     
+                    # Store the upper part for mask data
+                    upper_court_heatmap = heatmap[0:upper_court_height, 0:upper_court_width].copy()
+                    
                     # Finalize and display heatmap
                     if np.max(heatmap) > 0:
                         # Normalize heatmap to range 0-1
@@ -1000,12 +1051,16 @@ class MiniCourt():
                         mask[
                             self.court_start_y - self.start_y:net_y - self.start_y,
                             self.court_start_x - self.start_x:self.court_end_x - self.start_x
-                        ] = heatmap_colored[0:(net_y-self.court_start_y), :]
+                        ] = heatmap_colored[0:upper_court_height, :]
                         
                         # Blend with original frame
                         cv2.addWeighted(mask, alpha, court_image, 1, 0, court_image)
             
-            # Apply mini_court.draw_shot_trajectories logic
+            # Save the raw upper court heatmap data if requested
+            if save_mask:
+                mask_data.append(upper_court_heatmap)
+                
+            # Apply draw_shot_trajectories logic
             for hit_frame, is_upper, landing_frame, player_pos, landing_pos in hit_sequence:
                 # Only show trajectories from lower player hits
                 if not is_upper and hit_frame <= frame_idx <= landing_frame:
@@ -1038,11 +1093,12 @@ class MiniCourt():
                                     cv2.circle(court_image, (dot_x, dot_y), 1, (0, 255, 255), 2)
             
             # Draw ball current position
-            if frame_idx < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[frame_idx]:
-                ball_pos = ball_mini_court_detections[frame_idx][1]
-                ball_x, ball_y = int(ball_pos[0]) - self.start_x, int(ball_pos[1]) - self.start_y
-                if 0 <= ball_x < width and 0 <= ball_y < height:
-                    cv2.circle(court_image, (ball_x, ball_y), 4, (0, 255, 255), -1)
+            if draw_ball:            
+                if frame_idx < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[frame_idx]:
+                    ball_pos = ball_mini_court_detections[frame_idx][1]
+                    ball_x, ball_y = int(ball_pos[0]) - self.start_x, int(ball_pos[1]) - self.start_y
+                    if 0 <= ball_x < width and 0 <= ball_y < height:
+                        cv2.circle(court_image, (ball_x, ball_y), 4, (0, 255, 255), -1)
             
             # Draw players
             if frame_idx < len(player_mini_court_detections):
@@ -1057,5 +1113,313 @@ class MiniCourt():
         
         # Release the writer
         video_writer.release()
+        
+        # Save mask data if requested
+        if save_mask:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(mask_path), exist_ok=True)
+            np.save(mask_path, np.array(mask_data))
+            return output_path, mask_data
+        
+        return output_path
+    
+    def create_scoring_heatmap_animation(self, player_mini_court_detections, ball_mini_court_detections, landing_frames,
+                                        output_path="output/animations/scoring_heatmap_animation.mp4",
+                                        player_sigma=10, ball_sigma=8, color_map=cv2.COLORMAP_JET, alpha=0.7, fps=15,
+                                        draw_trajectory=True, trajectory_color=(0, 255, 255), line_thickness=2,
+                                        easy_reach_threshold = 0.1, save_mask=False,
+                                        mask_path="output/masks/scoring_heatmap_mask.npy"):
+        """
+        Creates an animation showing the scoring probability heatmap - combining player distance and ball landing probability.
+        When the ball is hit by a player in the upper court, only the player distance heatmap is shown.
+        
+        Parameters:
+        player_mini_court_detections - Player positions for each frame
+        ball_mini_court_detections - Ball positions for each frame
+        landing_frames - List of frame indices where the ball hits the ground
+        output_path - Path where to save the animation
+        player_sigma - Standard deviation for player distance Gaussian blur
+        ball_sigma - Standard deviation for ball landing Gaussian blur
+        color_map - OpenCV color map to use for visualization
+        alpha - Heatmap transparency
+        fps - Frames per second of the animation
+        draw_trajectory - Whether to draw shot trajectories
+        trajectory_color - Color of the trajectory line (BGR format)
+        line_thickness - Thickness of the trajectory line
+        save_mask - Whether to save the raw heatmap data
+        mask_path - Path where to save the heatmap mask data
+        
+        Returns:
+        output_path - Path to the created animation
+        mask_data - Raw heatmap data if save_mask is True
+        """
+        # Create a video writer
+        width = self.drawing_rectangle_width
+        height = self.drawing_rectangle_height
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        
+        # Find the y position of the net (mid-court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+        
+        # Court dimensions
+        court_width = self.court_end_x - self.court_start_x
+        court_height = self.court_end_y - self.court_start_y
+        
+        # Upper court dimensions
+        upper_court_height = net_y - self.court_start_y
+        upper_court_width = self.court_drawing_width
+        
+        # Storage for combined heatmap masks if needed
+        if save_mask:
+            mask_data = []
+        
+        # Maximum possible distance for normalization
+        max_distance = np.sqrt(self.court_drawing_width**2 + (net_y - self.court_start_y)**2)
+        
+        # Determine the sequence of hits and landings
+        hit_sequence = []
+        for i, landing_frame in enumerate(landing_frames):
+            if i == 0:
+                continue  # Skip first landing
+                    
+            # Find the previous landing
+            prev_landing = landing_frames[i-1]
+            
+            # Estimate when the ball was hit after previous landing
+            hit_frame = prev_landing + max(1, (landing_frame - prev_landing) // 3)
+            
+            # Find who hit the ball
+            if hit_frame < len(player_mini_court_detections) and hit_frame < len(ball_mini_court_detections):
+                if 1 in ball_mini_court_detections[hit_frame]:
+                    ball_pos = ball_mini_court_detections[hit_frame][1]
+                    
+                    # Find closest player
+                    min_dist = float('inf')
+                    closest_player_y = None
+                    closest_player_pos = None
+                    
+                    for player_id, position in player_mini_court_detections[hit_frame].items():
+                        if position is not None:
+                            dist = euclidean_distance(position, ball_pos)
+                            if dist < min_dist:
+                                min_dist = dist
+                                closest_player_y = position[1]
+                                closest_player_pos = position
+                    
+                    if closest_player_y is not None:
+                        # Add to sequence
+                        is_upper_player = closest_player_y < net_y
+                        
+                        # Get the landing position
+                        if landing_frame < len(ball_mini_court_detections) and 1 in ball_mini_court_detections[landing_frame]:
+                            landing_pos = ball_mini_court_detections[landing_frame][1]
+                            landing_x = int(landing_pos[0]) - self.court_start_x
+                            landing_y = int(landing_pos[1]) - self.court_start_y
+                            
+                            # Only consider valid landings
+                            if 0 <= landing_x < court_width and 0 <= landing_y < court_height:
+                                hit_sequence.append((hit_frame, is_upper_player, landing_frame, closest_player_pos, (landing_x, landing_y)))
+        
+        # Sort hits by frame number
+        hit_sequence.sort(key=lambda x: x[0])
+        
+        # For each frame, create heatmap
+        frame_count = len(player_mini_court_detections)
+        for frame_idx in range(frame_count):
+            # Create blank image for court
+            court_image = np.zeros((height, width, 3), dtype=np.uint8)
+            
+            # Draw court lines (white)
+            for line in self.lines:
+                start_point = (int(self.drawing_key_points[line[0]*2]) - self.start_x, 
+                            int(self.drawing_key_points[line[0]*2+1]) - self.start_y)
+                end_point = (int(self.drawing_key_points[line[1]*2]) - self.start_x, 
+                        int(self.drawing_key_points[line[1]*2+1]) - self.start_y)
+                cv2.line(court_image, start_point, end_point, (255, 255, 255), 2)
+
+            # Draw the net (purple)
+            net_start_point = (self.drawing_key_points[0] - self.start_x, 
+                            int((self.drawing_key_points[1] + self.drawing_key_points[5])/2) - self.start_y)
+            net_end_point = (self.drawing_key_points[2] - self.start_x, 
+                        int((self.drawing_key_points[1] + self.drawing_key_points[5])/2) - self.start_y)
+            cv2.line(court_image, net_start_point, net_end_point, (255, 0, 255), 2)
+            
+            # ----- PLAYER DISTANCE HEATMAP -----
+            # Create grid for player distance
+            player_heatmap = np.zeros((upper_court_height, upper_court_width), dtype=np.float32)
+            
+            if frame_idx < len(player_mini_court_detections):
+                # Calculate player distance for each point in the upper court
+                for y in range(upper_court_height):
+                    for x in range(upper_court_width):
+                        grid_y = self.court_start_y + y
+                        grid_x = self.court_start_x + x
+                        
+                        # Measure distance from this point to nearest player
+                        min_distance = max_distance
+                        for player_id, position in player_mini_court_detections[frame_idx].items():
+                            if position is not None:
+                                player_x, player_y = position
+                                distance = euclidean_distance((grid_x, grid_y), (player_x, player_y))
+                                min_distance = min(min_distance, distance)
+                        
+                        # Normalize distance to [0, 1]
+                        normalized_distance = (min_distance / max_distance)**4
+                        
+                        # Apply a threshold to significantly reduce values near players
+                        # Distance threshold (in normalized units) below which values are greatly reduced
+                        player_reach_threshold = 0.25
+                        if (min_distance / max_distance) < player_reach_threshold:
+                            # Apply steep drop-off for points within player reach
+                            normalized_distance *= 0.1
+                        
+                        player_heatmap[y, x] = normalized_distance
+                
+                # Optional: Apply Gaussian blur to smooth player heatmap
+                if player_sigma > 0:
+                    player_heatmap = cv2.GaussianBlur(player_heatmap, (0, 0), player_sigma)
+                    
+                # Re-normalize to ensure max value is 1
+                if np.max(player_heatmap) > 0:
+                    player_heatmap = player_heatmap / np.max(player_heatmap)
+            
+            # Find the active hit (most recent hit before current frame)
+            active_hit = None
+            for hit_frame, is_upper, landing_frame, player_pos, landing_pos in hit_sequence:
+                if hit_frame <= frame_idx:
+                    active_hit = (hit_frame, is_upper, landing_frame, player_pos, landing_pos)
+                else:
+                    break
+            
+            # ----- BALL LANDING HEATMAP (only if the last shot is from the upper court) -----
+            combined_heatmap = player_heatmap.copy()  # Default to player heatmap only
+            
+            # If we have an active hit and it's NOT from upper player, create combined heatmap
+            if active_hit is not None and not active_hit[1]:  # not is_upper
+                # Initialize ball landing heatmap
+                ball_heatmap = np.zeros((upper_court_height, upper_court_width), dtype=np.float32)
+                
+                hit_frame, is_upper, landing_frame, player_pos, landing_pos = active_hit
+                landing_x, landing_y = landing_pos
+                
+                # Only process landings in upper court
+                if landing_y < upper_court_height:
+                    # Apply fade-in effect
+                    frames_since_hit = frame_idx - hit_frame
+                    fade_frames = 60  # Adjust as needed
+                    intensity = min(1.0, frames_since_hit / fade_frames) if frames_since_hit < fade_frames else 1.0
+                    
+                    # Add the landing point
+                    point_map = np.zeros((upper_court_height, upper_court_width), dtype=np.float32)
+                    if 0 <= landing_y < point_map.shape[0] and 0 <= landing_x < point_map.shape[1]:
+                        point_map[landing_y, landing_x] = intensity
+                    
+                    # Apply Gaussian blur to spread the landing probability
+                    if ball_sigma > 0:
+                        ball_heatmap = cv2.GaussianBlur(point_map, (0, 0), ball_sigma)
+                        
+                        # Normalize to [0, 1]
+                        if np.max(ball_heatmap) > 0:
+                            ball_heatmap = ball_heatmap / np.max(ball_heatmap)
+        
+                    
+                    # Create mask to identify areas easily reachable by players
+                    easy_reach_mask = (player_heatmap < easy_reach_threshold)
+                    
+                    # First, start by combining player and ball heatmaps
+                    # Multiply them to get high values only where BOTH:
+                    # - Players are far away (high player_heatmap)
+                    # - Ball is likely to land (high ball_heatmap)
+                    combined_heatmap = player_heatmap * ball_heatmap
+                    
+                    # Completely zero out values in areas easily reachable by players
+                    # regardless of ball landing probability
+                    combined_heatmap[easy_reach_mask] = 0.0
+                    
+                    # Apply additional weighting to emphasize distance from players
+                    # This ensures areas far from players get emphasized
+                    combined_heatmap = combined_heatmap * (player_heatmap ** 2)
+                    
+                    # Normalize the final heatmap
+                    if np.max(combined_heatmap) > 0:
+                        combined_heatmap = combined_heatmap / np.max(combined_heatmap)
+                    else:
+                        # If everything got zeroed out, just use a very low constant value
+                        combined_heatmap = np.ones_like(combined_heatmap) * 0.01
+            
+            # Save the raw heatmap if requested
+            if save_mask:
+                mask_data.append(combined_heatmap.copy())
+            
+            # Apply colormap to the selected heatmap
+            colored_heatmap = cv2.applyColorMap((combined_heatmap * 255).astype(np.uint8), color_map)
+            
+            # Create mask for overlay
+            mask = np.zeros_like(court_image)
+            
+            # Apply heatmap to upper court
+            mask[
+                self.court_start_y - self.start_y:net_y - self.start_y,
+                self.court_start_x - self.start_x:self.court_end_x - self.start_x
+            ] = colored_heatmap
+            
+            # Blend with court image
+            cv2.addWeighted(mask, alpha, court_image, 1, 0, court_image)
+            
+            # Draw trajectory if requested
+            if draw_trajectory:
+                for hit_frame, is_upper, landing_frame, player_pos, landing_coords in hit_sequence:
+                    # Only show trajectories from lower player hits
+                    if not is_upper and hit_frame <= frame_idx <= landing_frame:
+                        # Get original player position
+                        player_x, player_y = int(player_pos[0]) - self.start_x, int(player_pos[1]) - self.start_y
+                        
+                        # Get landing position
+                        landing_x, landing_y = landing_coords
+                        landing_x_abs = int(landing_x + self.court_start_x - self.start_x)
+                        landing_y_abs = int(landing_y + self.court_start_y - self.start_y)
+                        
+                        # Check if landing position is in the upper part of the court
+                        if landing_y < (net_y - self.court_start_y):
+                            # Draw the landing point
+                            cv2.circle(court_image, (landing_x_abs, landing_y_abs), 5, trajectory_color, -1)
+                            
+                            # Draw dotted line from player to landing position
+                            line_length = np.sqrt((landing_x_abs - player_x)**2 + (landing_y_abs - player_y)**2)
+                            num_segments = int(line_length / 10)  # One segment every ~10 pixels
+                            
+                            if num_segments > 1:
+                                # Create points along the line
+                                for i in range(num_segments):
+                                    t = i / (num_segments - 1)
+                                    dot_x = int(player_x + t * (landing_x_abs - player_x))
+                                    dot_y = int(player_y + t * (landing_y_abs - player_y))
+                                    
+                                    # Draw a small line segment (dot) at this position
+                                    if i % 2 == 0:  # Skip every other segment for dotted effect
+                                        cv2.circle(court_image, (dot_x, dot_y), 1, trajectory_color, line_thickness)
+            
+            # Draw players as points
+            for player_id, position in player_mini_court_detections[frame_idx].items():
+                if position is not None:
+                    x, y = position
+                    x_adj = int(x - self.start_x)
+                    y_adj = int(y - self.start_y)
+                    if 0 <= x_adj < width and 0 <= y_adj < height:
+                        cv2.circle(court_image, (x_adj, y_adj), 5, (255, 255, 0), -1)  # Yellow for players
+            
+            
+            # Write frame to video
+            video_writer.write(court_image)
+        
+        # Release the writer
+        video_writer.release()
+        
+        # Save mask data if requested
+        if save_mask:
+            os.makedirs(os.path.dirname(mask_path), exist_ok=True)
+            np.save(mask_path, np.array(mask_data))
+            return output_path, mask_data
         
         return output_path

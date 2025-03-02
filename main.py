@@ -10,12 +10,12 @@ import torch
 def main():
 
     AUDIO = True
-    DRAW_MINI_COURT = True
+    DRAW_MINI_COURT = False
     
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    video_number = 100
+    video_number = 101
     input_video_path = f'data/input_video{video_number}.mp4'  # Toy example
     #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
     
@@ -50,14 +50,14 @@ def main():
 
     # Detect & Track Players
     player_detections = player_tracker.detect_frames(video_frames,
-                                                     read_from_stub = False,
+                                                     read_from_stub = True,
                                                      stub_path = 'tracker_stubs/player_detections.pkl')
 
     
     # Detect Ball 
     if ball_tracker_method == 'yolo':
         ball_detections = ball_tracker.detect_frames(video_frames,
-                                                    read_from_stub = False,
+                                                    read_from_stub = True,
                                                     stub_path = 'tracker_stubs/ball_detections.pkl')
         # Interpolate the missing tracking positions for the ball
         ball_detections = ball_tracker.interpolate_ball_positions(ball_detections)
@@ -133,27 +133,43 @@ def main():
     
     # Check the racket hits
 
-    ball_shots_frames = get_ball_shot_frames_new(ball_mini_court_detections)
+    #ball_shots_frames = get_ball_shot_frames_new(ball_mini_court_detections)
 
-    ball_shots_frames = combine_visual_audio(ball_shots_frames, ball_shots_frames_audio)
+    #ball_shots_frames = combine_visual_audio(ball_shots_frames, ball_shots_frames_audio)
 
 
-    # Player Heatmap Animation
-    player_heatmap_animation_path = mini_court.create_player_heatmap_animation(player_mini_court_detections,
-                                                                output_path=f"output/animations/player_heatmap_animation{video_number}.mp4")
-    print(f"Player Heatmap animation saved to: {player_heatmap_animation_path}")
+    # Generate score heatmap by combining player and ball heatmaps
+    player_heatmap_path = mini_court.create_player_heatmap_animation(
+        player_mini_court_detections,
+        output_path=f"output/animations/player_heatmap_animation{video_number}.mp4",
+        mask_path=f"output/masks/player_heatmap_mask{video_number}.npy"
+    )
     
-    # Ball Heatmap Animation
-    ball_heatmap_animation_path = mini_court.create_ball_heatmap_animation(
+    print(f"Player Heatmap animation saved to: {player_heatmap_path}")
+
+    ball_heatmap_path = mini_court.create_ball_heatmap_animation(
         player_mini_court_detections,
         ball_mini_court_detections,
         ball_landing_frames,
-        first_player_balls_frames,  
+        first_player_balls_frames,
         output_path=f"output/animations/ball_heatmap_animation{video_number}.mp4",
         sigma=15,
-        color_map=cv2.COLORMAP_HOT
+        color_map=cv2.COLORMAP_HOT,
+        mask_path=f"output/masks/ball_heatmap_mask{video_number}.npy"
     )
-    print(f"Ball Heatmap animation saved to: {ball_heatmap_animation_path}")
+
+    print(f"Ball Heatmap animation saved to: {ball_heatmap_path}")
+
+    # Create score heatmap (combination of player and ball heatmaps)
+    score_heatmap_path = mini_court.create_scoring_heatmap_animation(
+    player_mini_court_detections, 
+    ball_mini_court_detections, 
+    ball_landing_frames,
+    output_path=f"output/animations/scoring_heatmap_animation{video_number}.mp4", 
+    color_map=cv2.COLORMAP_HOT
+)
+
+    print(f"Score Heatmap animation saved to: {score_heatmap_path}")
 
     
     # Draw Output
@@ -166,10 +182,10 @@ def main():
     # Draw bounding box around ball
     if ball_tracker_method == 'yolo':
         output_frames = ball_tracker.draw_bboxes(output_frames, ball_detections)
-        output_frames = ball_tracker.draw_ball_hits(output_frames, ball_shots_frames)
+        output_frames = ball_tracker.draw_ball_hits(output_frames, ball_shots_frames_audio)  # Or ball_shots_frames 
     elif ball_tracker_method == 'tracknet':
         output_frames = write_track(output_frames, ball_detections_tracknet)
-        output_frames = draw_ball_hits(output_frames, ball_shots_frames)
+        output_frames = draw_ball_hits(output_frames, ball_shots_frames_audio) # Or ball_shots_frames
     
     # Draw keypoints, according to the first frame
     output_frames = courtline_detector.draw_keypoints_on_video(output_frames, courtline_keypoints)
