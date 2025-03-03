@@ -1,0 +1,14 @@
+opencv-python
+torch
+pandas
+numpy<2
+moviepy==1.0.3
+tqdm
+scipy
+librosa
+matplotlib
+tensorflow
+ultralytics
+supervision
+torchvision
+plotly

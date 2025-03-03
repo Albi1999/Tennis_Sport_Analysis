@@ -1,10 +1,27 @@
-from utils import (read_video, save_video, infer_model, remove_outliers, split_track, combine_visual_audio, interpolation, write_track, get_ball_shot_frames_audio, convert_mp4_to_mp3,draw_ball_hits, convert_ball_detection_to_bbox, get_ball_shot_frames_new)
+from utils import (read_video, 
+                   save_video, 
+                   infer_model, 
+                   remove_outliers, 
+                   split_track, 
+                   combine_visual_audio, 
+                   interpolation, 
+                   write_track, 
+                   get_ball_shot_frames_audio, 
+                   convert_mp4_to_mp3,
+                   draw_ball_hits, 
+                   convert_ball_detection_to_bbox, 
+                   get_ball_shot_frames_new,
+                   euclidean_distance,
+                   convert_pixel_distance_to_meters,
+                   draw_player_stats)
 from trackers import (PlayerTracker, BallTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from court_line_detector import CourtLineDetector
 import cv2 
 import torch 
-
+from copy import deepcopy
+import pandas as pd
+import info
 
 
 def main():
@@ -113,9 +130,9 @@ def main():
     mini_court = MiniCourt(video_frames[0])
 
     # Detect ball shots
-    #ball_shots_frames = ball_tracker.get_ball_shot_frames(ball_detections)
-    #print(f"Ball shots detected at frames: {ball_shots_frames}")
-    #first_player_balls_frames = ball_shots_frames[0::2]
+    ball_shots_frames = ball_tracker.get_ball_shot_frames(ball_detections)
+    print(f"Ball shots detected at frames: {ball_shots_frames}")
+    # first_player_balls_frames = ball_shots_frames[0::2]
     
     first_player_balls_frames = [52, 113, 177, 235, 305] # Hardcoded for now
     print(f"First player ball shots detected at frames: {first_player_balls_frames}")
@@ -131,6 +148,87 @@ def main():
                                                                                                                             courtline_keypoints,
                                                                                                                             chosen_players_ids)
     
+    # Speed stats
+
+    player_stats_data = [{
+        'frame_num': 0,
+
+        # player 1 stats
+        'player_1_number_of_shots': 0,
+        'player_1_total_shot_speed': 0,
+        'player_1_last_shot_speed': 0,
+        'player_1_total_player_speed': 0,
+        'player_1_last_player_speed': 0,
+
+        #player 2 stats
+        'player_2_number_of_shots': 0,
+        'player_2_total_shot_speed': 0,
+        'player_2_last_shot_speed': 0,
+        'player_2_total_player_speed': 0,
+        'player_2_last_player_speed': 0,
+    } ]
+
+    # Loop over all ball shots except the last one since it doesn't have an answer shot.
+    for ball_shot_ind in range(len(ball_shots_frames)-1):
+        start_frame = ball_shots_frames[ball_shot_ind]               # Starting frame of the ball shot
+        end_frame = ball_shots_frames[ball_shot_ind+1]               # Ending frame of the ball shot
+        ball_shot_time_in_seconds = (end_frame - start_frame) / fps  # Time taken by the ball to travel from the player to the opponent
+
+        # Get distance covered by the ball
+        distance_covered_by_ball_pixels = euclidean_distance(ball_mini_court_detections[start_frame][1],
+                                                             ball_mini_court_detections[end_frame][1])
+        distance_covered_by_ball_meters = convert_pixel_distance_to_meters(distance_covered_by_ball_pixels, 
+                                                                           info.DOUBLE_LINE_WIDTH,
+                                                                           mini_court.get_width_of_mini_court()) # Distance covered by the ball in meters
+
+        # Speed of the ball shot in km/h
+        speed_of_ball_shot = distance_covered_by_ball_meters / ball_shot_time_in_seconds * 3.6  # 3.6 to convert m/s to km/h
+
+        # Player who shot the ball
+        player_position = player_mini_court_detections[start_frame] # Player positions at the start of the ball shot
+        player_shot_ball = min(player_position.keys(), key = lambda player_id: euclidean_distance(player_position[player_id], 
+                                                                                                    ball_mini_court_detections[start_frame][1]))
+        
+        # Opponent player's speed
+        opponent_player_id = 1 if player_shot_ball == 2 else 2 # Opponent player's ID
+        distance_covered_by_opponent_pixels = euclidean_distance(player_mini_court_detections[start_frame][opponent_player_id],
+                                                                    player_mini_court_detections[end_frame][opponent_player_id]) 
+        distance_covered_by_opponent_meters = convert_pixel_distance_to_meters(distance_covered_by_opponent_pixels, 
+                                                                           info.DOUBLE_LINE_WIDTH,
+                                                                           mini_court.get_width_of_mini_court()) # Distance covered by the opponent player in meters
+
+        opponent_speed = distance_covered_by_opponent_meters / ball_shot_time_in_seconds * 3.6 # 3.6 to convert m/s to km/h
+
+        # Update player stats
+        current_player_stats = deepcopy(player_stats_data[-1]) # Copy of previous stats
+        current_player_stats['frame_num'] = start_frame
+        
+        # Player who shot the ball stats
+        current_player_stats[f'player_{player_shot_ball}_number_of_shots'] += 1
+        current_player_stats[f'player_{player_shot_ball}_total_shot_speed'] += speed_of_ball_shot
+        current_player_stats[f'player_{player_shot_ball}_last_shot_speed'] = speed_of_ball_shot
+
+        # Opponent player stats
+        current_player_stats[f'player_{opponent_player_id}_total_player_speed'] += opponent_speed
+        current_player_stats[f'player_{opponent_player_id}_last_player_speed'] = opponent_speed
+
+        player_stats_data.append(current_player_stats) # Append the updated stats
+    
+    # Convert player stats data to a DataFrame
+    player_stats_data_df = pd.DataFrame(player_stats_data)
+    frames_df = pd.DataFrame({'frame_num':list(range(len(video_frames)))})
+    player_stats_data_df = pd.merge(frames_df, player_stats_data_df, on='frame_num', how='left') # Merge the player stats data with the frames data
+    player_stats_data_df = player_stats_data_df.ffill() # Fill the missing values by replacing them with the previous value
+
+    # Calculate average shot speed for each player
+    player_stats_data_df['player_1_average_shot_speed'] = player_stats_data_df['player_1_total_shot_speed'] / player_stats_data_df['player_1_number_of_shots']
+    player_stats_data_df['player_2_average_shot_speed'] = player_stats_data_df['player_2_total_shot_speed'] / player_stats_data_df['player_2_number_of_shots']
+
+    # Calculate average player speed for each player
+    # We calculate the average player speed by dividing the total player speed by the number of shots of the opponent player
+    player_stats_data_df['player_1_average_player_speed'] = player_stats_data_df['player_1_total_player_speed'] / player_stats_data_df['player_2_number_of_shots']
+    player_stats_data_df['player_2_average_player_speed'] = player_stats_data_df['player_2_total_player_speed'] / player_stats_data_df['player_1_number_of_shots']
+
     # Check the racket hits
 
     #ball_shots_frames = get_ball_shot_frames_new(ball_mini_court_detections)
@@ -167,7 +265,7 @@ def main():
     ball_landing_frames,
     output_path=f"output/animations/scoring_heatmap_animation{video_number}.mp4", 
     color_map=cv2.COLORMAP_HOT
-)
+    )
 
     print(f"Score Heatmap animation saved to: {score_heatmap_path}")
 
@@ -216,7 +314,8 @@ def main():
         output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
       #  output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
 
-    
+    # Draw player stats
+    output_frames = draw_player_stats(output_frames, player_stats_data_df)
 
     # Draw frame number (top left corner)
     for i, frame in enumerate(output_frames):
@@ -225,7 +324,7 @@ def main():
     # Save video
     save_video(output_frames, output_video_path, fps)
 
-  
+
 
 if __name__ == '__main__':
     main()
