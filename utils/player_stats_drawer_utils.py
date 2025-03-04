@@ -2,6 +2,16 @@ import numpy as np
 import cv2
 
 def draw_player_stats(output_video_frames, player_stats):
+    """
+    Draws the player statistics on the output video frames.
+    This is the original function to create the player stats box in the output video.
+
+    :param:
+        output_video_frames: List of frames of the output video.
+        player_stats: DataFrame containing player statistics.
+    :return: 
+        List of frames with player statistics drawn on them.
+    """
 
     for index,row in player_stats.iterrows():
         player_1_shot_speed = row['player_1_last_shot_speed']
@@ -59,4 +69,87 @@ def draw_player_stats(output_video_frames, player_stats):
         output_video_frames[index] = cv2.putText(output_video_frames[index], text, (start_x+130, start_y+200), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
     
     return output_video_frames
-        
+
+def create_player_stats_box_video(player_stats, video_number, fps=30):
+    """
+    Creates a separate video containing only the player stats box.
+
+    :param:
+        player_stats: DataFrame containing player statistics for each frame.
+        video_number: Video identifier.
+        fps: Frames per second for the output video.
+    :return: 
+        Path to the saved stats box video.
+    """
+
+    width = 400  # Increased for better text spacing
+    height = 250  # Increased height to improve spacing
+    output_path = f"output/animations/player_stats_box{video_number}.mp4"
+
+    # Improved font scales for better clarity
+    font_scale_heading = 0.8
+    font_scale_label = 0.4
+    font_scale_value = 0.5
+    thickness_heading = 2
+    thickness_label = 1
+
+    # Dynamic spacing based on height
+    padding_top = int(height * 0.1)  # 10% padding from top
+    line_spacing = int(height * 0.18)  # 18% of height as spacing per line
+
+    # Initialize video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    # Iterate over each frame in player_stats
+    for _, row in player_stats.iterrows():
+        # Create a blank frame for each stats update
+        stats_box_frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+        # Extract stats for the current frame
+        player_1_shot_speed = row['player_1_last_shot_speed']
+        player_2_shot_speed = row['player_2_last_shot_speed']
+        player_1_speed = row['player_1_last_player_speed']
+        player_2_speed = row['player_2_last_player_speed']
+        avg_player_1_shot_speed = row['player_1_average_shot_speed']
+        avg_player_2_shot_speed = row['player_2_average_shot_speed']
+
+        # Adjusted text positioning dynamically
+        y_offset = padding_top
+
+        # Draw text
+        text = "     Player 1     Player 2"
+        stats_box_frame = cv2.putText(stats_box_frame, text, (width // 8, y_offset), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale_heading, (255, 255, 255), thickness_heading)
+
+        y_offset += line_spacing
+        text = "Shot Speed"
+        stats_box_frame = cv2.putText(stats_box_frame, text, (10, y_offset), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale_label, (255, 255, 255), thickness_label)
+        text = f"     {player_1_shot_speed:.1f} km/h      {player_2_shot_speed:.1f} km/h"
+        stats_box_frame = cv2.putText(stats_box_frame, text, (width // 4, y_offset), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale_value, (255, 255, 255), thickness_label)
+
+        y_offset += line_spacing
+        text = "Player Speed"
+        stats_box_frame = cv2.putText(stats_box_frame, text, (10, y_offset), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale_label, (255, 255, 255), thickness_label)
+        text = f"      {player_1_speed:.1f} km/h       {player_2_speed:.1f} km/h"
+        stats_box_frame = cv2.putText(stats_box_frame, text, (width // 4, y_offset), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale_value, (255, 255, 255), thickness_label)
+
+        y_offset += line_spacing
+        text = "Avg. Shot Speed"
+        stats_box_frame = cv2.putText(stats_box_frame, text, (10, y_offset), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale_label, (255, 255, 255), thickness_label)
+        text = f"     {avg_player_1_shot_speed:.1f} km/h      {avg_player_2_shot_speed:.1f} km/h"
+        stats_box_frame = cv2.putText(stats_box_frame, text, (width // 4, y_offset), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale_value, (255, 255, 255), thickness_label)
+
+        # Write the current frame to the video
+        video_writer.write(stats_box_frame)
+
+    # Release the video writer
+    video_writer.release()
+
+    return output_path

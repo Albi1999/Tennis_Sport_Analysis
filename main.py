@@ -13,7 +13,8 @@ from utils import (read_video,
                    get_ball_shot_frames_new,
                    euclidean_distance,
                    convert_pixel_distance_to_meters,
-                   draw_player_stats)
+                   draw_player_stats,
+                   create_player_stats_box_video)
 from trackers import (PlayerTracker, BallTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from court_line_detector import CourtLineDetector
@@ -28,6 +29,7 @@ def main():
 
     AUDIO = True
     DRAW_MINI_COURT = False
+    SAVE_STATS_BOX_SEPARATELY = True
     
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -315,7 +317,13 @@ def main():
       #  output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
 
     # Draw player stats
-    output_frames = draw_player_stats(output_frames, player_stats_data_df)
+    if SAVE_STATS_BOX_SEPARATELY:
+        # Create a separate video containing only the player stats box
+        stats_box_path = create_player_stats_box_video(player_stats_data_df, video_number) # Here we are using the custom function to save the stats box separately
+        print(f"Player Stats Box saved to: {stats_box_path}")
+    else:
+        # Draw player stats on the output video
+        output_frames = draw_player_stats(output_frames, player_stats_data_df) # Here we are using the original function
 
     # Draw frame number (top left corner)
     for i, frame in enumerate(output_frames):
