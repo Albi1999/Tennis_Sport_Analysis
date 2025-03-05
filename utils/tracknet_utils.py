@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, butter, sosfilt
 from collections import defaultdict
 from utils import euclidean_distance
+from copy import deepcopy
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -72,7 +73,7 @@ def infer_model(frames, model, scale):
     return ball_track, dists 
 
 
-def remove_outliers(ball_track, dists, max_dist = 100):
+def remove_outliers(ball_track, dists, max_dist = 50):
     """ Remove outliers from model prediction    
     :params
         ball_track: list of detected ball points
@@ -142,31 +143,62 @@ def interpolation(coords):
 
 
 
-def write_track(frames, ball_track, trace = 7):
+def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'circle'):
 
+    ball_shots_frames_original = deepcopy(ball_shots_frames)
+    # First, extend the ball_shots_frames 
+    for i in ball_shots_frames_original:
+        for j in range(i, i + trace//2):
+            ball_shots_frames.append(j)
+    # Use a set (because it has lookup in O(1))
+    ball_shots_frames = set(ball_shots_frames)
+    
     output_video_frames = []
     for num in range(len(frames)):
         frame = frames[num].copy()
-        for i in range(trace):
-            if (num-i > 0):
-                if ball_track[num-i][0]:
+        # Reset tracker whenever we have a racket hit (and for the next "trace" amount of frames)
+        
+        if num in ball_shots_frames:
+                if ball_track[num][0]:
+                    x = int(ball_track[num][0])
+                    y = int(ball_track[num][1])
+                    frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness= 4)
+                    
+
+
+        # Draw trace of the ball
+        else:
+            # Store valid points we find
+            valid_points = []
+            
+            # Collect valid points first
+            for i in range(trace):
+                if (num-i > 0) and ball_track[num-i][0]:
                     x = int(ball_track[num-i][0])
                     y = int(ball_track[num-i][1])
-                    frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness=8-i)
-                    
+                    valid_points.append((x, y))
                 else:
                     break
+            
+            # Draw circles for all valid points
+            if draw_mode == 'circle':
+                for point in valid_points:
+                    frame = cv2.circle(frame, point, radius=0, color=(0, 0, 255), thickness=4)
+            
+            elif draw_mode == 'line':
+                # Draw lines between consecutive points
+                for i in range(1, len(valid_points)):
+                    frame = cv2.line(frame, valid_points[i], valid_points[i-1], color=(0, 0, 255), thickness=3)
+
         output_video_frames.append(frame)
     return output_video_frames
     
 
 import pandas as pd
 import matplotlib.pyplot as plt
-def get_ball_shot_frames_new(ball_positions_minicourt):
+def get_ball_shot_frames_visual(ball_positions_minicourt):
     """Based on change of direction in the mini court coordinates"""
 
-    # TODO : see how we can optimize : the constants such as window & minimum_change_frames, is there smth better, maybe work with frames and 
-    # how distant hits are from each other in a tennis match
 
     ball_positions = [x.get(1,[]) for x in ball_positions_minicourt]
     df_ball_positions = pd.DataFrame(ball_positions,columns=['x','y'])
@@ -312,7 +344,7 @@ def combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps):
 
 
 
-    
+    ball_shots_frames_final = sorted(list(ball_shots_frames_final))
     return ball_shots_frames_final
 
 

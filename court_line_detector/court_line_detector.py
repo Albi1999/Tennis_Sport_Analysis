@@ -241,4 +241,45 @@ class CourtLineDetector:
             output_video_frames.append(frame)
         
         return output_video_frames 
+    
+
+
+    def draw_lines_between_keypoints(self, frame, keypoints):
+        """
+        
+        Draw lines between the keypoints 
+        
+        """
+
+        # For easier indexing of keypoints
+        keypoints_zipped = []
+        for i in range(0, len(keypoints), 2):
+            x = int(keypoints[i])
+            y = int(keypoints[i+1])
+            keypoints_zipped.append((x,y))
+
+        
+        # Now connect
+
+        # 0 & 1
+        cv2.line(frame, keypoints_zipped[0], keypoints_zipped[1], color=(0,255,0), thickness= 1)
+        # 0 & 2
+        cv2.line(frame, keypoints_zipped[0], keypoints_zipped[2], color=(0,255,0), thickness= 1)
+        # 2 & 3
+        cv2.line(frame, keypoints_zipped[2], keypoints_zipped[3], color=(0,255,0), thickness= 1)
+        # 1 & 3
+        cv2.line(frame, keypoints_zipped[1], keypoints_zipped[3], color=(0,255,0), thickness= 1)
+        # 4 & 5
+        cv2.line(frame, keypoints_zipped[4], keypoints_zipped[5], color=(0,255,0), thickness= 1)
+        # 6 & 7
+        cv2.line(frame, keypoints_zipped[6], keypoints_zipped[7], color=(0,255,0), thickness= 1)
+        # 10 & 11
+        cv2.line(frame, keypoints_zipped[10], keypoints_zipped[11], color=(0,255,0), thickness= 1)
+        # 8 & 9 
+        cv2.line(frame, keypoints_zipped[8], keypoints_zipped[9], color=(0,255,0), thickness= 1)
+        # 12 & 13
+        cv2.line(frame, keypoints_zipped[12], keypoints_zipped[13], color=(0,255,0), thickness= 1)
+
+
+        return frame 
 

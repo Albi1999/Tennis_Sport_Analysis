@@ -4,6 +4,7 @@ import cv2
 from tqdm import tqdm 
 from moviepy.editor import VideoFileClip
 
+
 def read_video(video_path): # TODO : read in fps I think so we can reuse 
     """ 
     Read a video, frame by frame.
