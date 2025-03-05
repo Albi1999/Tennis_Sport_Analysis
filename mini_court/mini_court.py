@@ -229,30 +229,47 @@ class MiniCourt():
         output_ball_boxes = []
         
         # Create source and destination points for homography
-        src_points = []
-        dst_points = []
+        #src_points = []
+        #dst_points = []
         
         # Use court keypoints to create source and destination points for homography
         # We'll use the 4 corners of the court plus additional key points if available
-        key_point_indices = [0, 1, 2, 3]  # Corners of the court
+        #key_point_indices = [0, 1, 2, 3]  # Corners of the court
         
-        for idx in key_point_indices:
-            # Source points from the original court
-            src_points.append([original_court_key_points[idx*2], original_court_key_points[idx*2+1]])
+        #for idx in key_point_indices:
+        #    # Source points from the original court
+        #    src_points.append([original_court_key_points[idx*2], original_court_key_points[idx*2+1]])
             
             # Destination points in the mini court
-            dst_points.append([self.drawing_key_points[idx*2], self.drawing_key_points[idx*2+1]])
+        #    dst_points.append([self.drawing_key_points[idx*2], self.drawing_key_points[idx*2+1]])
         
         # Add more keypoints if we have them (like service lines, etc.)
-        for idx in [4, 5, 6, 7, 12, 13]:
-            if idx*2+1 < len(original_court_key_points) and idx*2+1 < len(self.drawing_key_points):
-                src_points.append([original_court_key_points[idx*2], original_court_key_points[idx*2+1]])
-                dst_points.append([self.drawing_key_points[idx*2], self.drawing_key_points[idx*2+1]])
+        #for idx in [4, 5, 6, 7, 12, 13]:
+        #    if idx*2+1 < len(original_court_key_points) and idx*2+1 < len(self.drawing_key_points):
+        #        src_points.append([original_court_key_points[idx*2], original_court_key_points[idx*2+1]])
+        #        dst_points.append([self.drawing_key_points[idx*2], self.drawing_key_points[idx*2+1]])
         
+         # Ensure we use all 14 keypoints
+        key_point_indices = list(range(14))  # Get all 14 keypoints
+        src_points = []
+        dst_points = []
+
+        # Modified code to handle the actual structure of original_court_key_points
+        for idx in range(min(14, len(original_court_key_points))):
+            src_points.append(original_court_key_points[idx])  # Each element is already a [x, y] pair
+            
+            # Ensure corresponding destination point exists
+            if idx * 2 + 1 < len(self.drawing_key_points):
+                dst_points.append([self.drawing_key_points[idx * 2], self.drawing_key_points[idx * 2 + 1]])
+
+        # Ensure both lists have the same number of keypoints
+        min_points = min(len(src_points), len(dst_points))
+        src_points = src_points[:min_points]
+        dst_points = dst_points[:min_points]
+
         # Convert to numpy arrays
-        src_points = np.array(src_points, dtype=np.float32)
-        dst_points = np.array(dst_points, dtype=np.float32)
-        
+        src_points = np.array(src_points, dtype=np.float32).reshape(-1, 2)
+        dst_points = np.array(dst_points, dtype=np.float32).reshape(-1, 2)
         # Calculate homography matrix
         H, _ = cv2.findHomography(src_points, dst_points, cv2.RANSAC, 5.0)
         

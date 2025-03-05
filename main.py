@@ -116,11 +116,11 @@ def main():
 
 
     # Detect court lines (on just the first frame, then they are fixed) # TODO : call this again whenever camera moves ? 
-    courtline_keypoints = courtline_detector.predict(video_frames[0])
+    refined_keypoints = courtline_detector.predict(video_frames[0])
 
 
     # Filter players
-    player_detections, chosen_players_ids = player_tracker.choose_and_filter_players(courtline_keypoints, player_detections)
+    player_detections, chosen_players_ids = player_tracker.choose_and_filter_players(refined_keypoints, player_detections)
 
     
     #print(f"Player detections: {player_detections[40][1]}")    # Example of how to access player detections at frame 40
@@ -147,7 +147,7 @@ def main():
     # Convert player positions to mini court positions
     player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
                                                                                                                             ball_detections,
-                                                                                                                            courtline_keypoints,
+                                                                                                                            refined_keypoints,
                                                                                                                             chosen_players_ids)
     
     # Speed stats
@@ -288,7 +288,7 @@ def main():
         output_frames = draw_ball_hits(output_frames, ball_shots_frames_audio) # Or ball_shots_frames
     
     # Draw keypoints, according to the first frame
-    output_frames = courtline_detector.draw_keypoints_on_video(output_frames, courtline_keypoints)
+    output_frames = courtline_detector.draw_keypoints_on_video(output_frames, refined_keypoints)
     
  
 
