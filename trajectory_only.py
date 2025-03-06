@@ -124,17 +124,17 @@ def main():
 
 
     # Detect court lines (on just the first frame, then they are fixed) # TODO : call this again whenever camera moves ? 
-    courtline_keypoints = courtline_detector.predict(video_frames[0])
+    refined_keypoints = courtline_detector.predict(video_frames[0])
 
 
     # Filter players
-    player_detections, chosen_players_ids = player_tracker.choose_and_filter_players(courtline_keypoints, player_detections)
+    player_detections, chosen_players_ids = player_tracker.choose_and_filter_players(refined_keypoints, player_detections)
             
     mini_court = MiniCourt(video_frames[0])
     # Convert player positions to mini court positions
     player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
                                                                                                                             ball_detections,
-                                                                                                                            courtline_keypoints,
+                                                                                                                            refined_keypoints,
                                                                                                                             chosen_players_ids)
     
 
@@ -143,7 +143,7 @@ def main():
     ball_shots_frames = get_ball_shot_frames_visual(ball_mini_court_detections)
     ball_shots_frames = combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps)
 
-
+    print(ball_shots_frames)
 
     
     # Draw Output
@@ -168,7 +168,7 @@ def main():
 
     
     # Draw Keypoints of court 
-    output_frames = courtline_detector.draw_keypoints_on_video(output_frames, courtline_keypoints)
+    output_frames = courtline_detector.draw_keypoints_on_video(output_frames, refined_keypoints)
 
 
     # Draw frame number (top left corner)
@@ -187,7 +187,7 @@ def main():
  #   scraping_data(video_n = 101, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_ground_hits_v_101, ball_shots_frames = ball_shots_frames, trace = trace)
 
     # change accordingly if on line or on circles
-    train,val,test = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+  #  train,val,test = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
 
     # Save video
     save_video(output_frames, output_video_path, fps)

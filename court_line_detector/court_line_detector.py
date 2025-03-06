@@ -217,8 +217,8 @@ class CourtLineDetector:
         #return frame 
         for i, (x, y) in enumerate(refined_keypoints): # Draw the refined keypoints
             x, y = int(x), int(y) 
-            cv2.putText(frame, f"K {i}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2) # Put the keypoint number
-            cv2.circle(frame, (x, y), 5, (0, 255, 0), -1) # Draw the keypoint
+        #    cv2.putText(frame, f"{i}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2) # Put the keypoint number
+            cv2.circle(frame, (x, y), 2, (0, 255, 0), -1) # Draw the keypoint
         return frame
 
     def draw_keypoints_on_video(self, video_frames, refined_keypoints):
@@ -238,6 +238,7 @@ class CourtLineDetector:
 
         for frame in video_frames:
             frame = self.draw_keypoints(frame, refined_keypoints)
+            frame = self.draw_lines_between_keypoints(frame, refined_keypoints)
             output_video_frames.append(frame)
         
         return output_video_frames 
@@ -251,34 +252,31 @@ class CourtLineDetector:
         
         """
 
-        # For easier indexing of keypoints
-        keypoints_zipped = []
-        for i in range(0, len(keypoints), 2):
-            x = int(keypoints[i])
-            y = int(keypoints[i+1])
-            keypoints_zipped.append((x,y))
+        # Convert keypoints into tuples of integers
+        keypoints = keypoints.astype(np.int32).tolist()
 
-        
-        # Now connect
+        # Convert to list of tuples
+        keypoints = list(map(tuple, keypoints))
+
 
         # 0 & 1
-        cv2.line(frame, keypoints_zipped[0], keypoints_zipped[1], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[0], keypoints[1], color=(0,255,0), thickness= 1)
         # 0 & 2
-        cv2.line(frame, keypoints_zipped[0], keypoints_zipped[2], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[0], keypoints[2], color=(0,255,0), thickness= 1)
         # 2 & 3
-        cv2.line(frame, keypoints_zipped[2], keypoints_zipped[3], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[2], keypoints[3], color=(0,255,0), thickness= 1)
         # 1 & 3
-        cv2.line(frame, keypoints_zipped[1], keypoints_zipped[3], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[1], keypoints[3], color=(0,255,0), thickness= 1)
         # 4 & 5
-        cv2.line(frame, keypoints_zipped[4], keypoints_zipped[5], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[4], keypoints[5], color=(0,255,0), thickness= 1)
         # 6 & 7
-        cv2.line(frame, keypoints_zipped[6], keypoints_zipped[7], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[6], keypoints[7], color=(0,255,0), thickness= 1)
         # 10 & 11
-        cv2.line(frame, keypoints_zipped[10], keypoints_zipped[11], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[10], keypoints[11], color=(0,255,0), thickness= 1)
         # 8 & 9 
-        cv2.line(frame, keypoints_zipped[8], keypoints_zipped[9], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[8], keypoints[9], color=(0,255,0), thickness= 1)
         # 12 & 13
-        cv2.line(frame, keypoints_zipped[12], keypoints_zipped[13], color=(0,255,0), thickness= 1)
+        cv2.line(frame, keypoints[12], keypoints[13], color=(0,255,0), thickness= 1)
 
 
         return frame 

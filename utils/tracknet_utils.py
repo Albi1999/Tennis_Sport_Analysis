@@ -12,6 +12,8 @@ from scipy.signal import find_peaks, butter, sosfilt
 from collections import defaultdict
 from utils import euclidean_distance
 from copy import deepcopy
+import pandas as pd
+
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -194,8 +196,6 @@ def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'c
     return output_video_frames
     
 
-import pandas as pd
-import matplotlib.pyplot as plt
 def get_ball_shot_frames_visual(ball_positions_minicourt):
     """Based on change of direction in the mini court coordinates"""
 
@@ -207,8 +207,8 @@ def get_ball_shot_frames_visual(ball_positions_minicourt):
     df_ball_positions['delta_y'] = df_ball_positions['y_rolling_mean'].diff()
     df_ball_positions['ball_hit'] = 0
 
-    plt.plot(df_ball_positions['delta_y'])
-    plt.savefig("SHOTS.png")
+   # plt.plot(df_ball_positions['delta_y'])
+   # plt.savefig("SHOTS.png")
 
     minimum_change_frames_for_hit = 20 # for this amount of frames it has to keep the changed direction
                                        # to be considered a hit
@@ -237,7 +237,7 @@ def get_ball_shot_frames_visual(ball_positions_minicourt):
 
 
 
-def get_ball_shot_frames_audio(audio_file, fps, plot=True):
+def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     # Load the audio file
     y, sr = librosa.load(audio_file, sr=None)
     
@@ -338,9 +338,26 @@ def combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps):
     # Next, we need to take into account that there will be more silent hits that our audio model might not recognize, but are recognized by the change of direction model
     # Therefore, we check if we have large gaps in the audio results where we have some results of the change of direction model
 
-    # In a "normal" ball exchange, we can say that there is roughly one hit per second (# TODO : check), thus in frames exactly our fps 
-    # Therefore, we check for each value in ball_shots_frames, if there is no frame in ball_shots_frames_audio in fps distance, then we should also take that frame
-    # TODO : implement
+
+
+    # Iterate through the audio frame in 2 (checking always pairs)
+    # As a rough base, a hit should occur every 1.5 seconds (roughly), when players play from the very back;
+    # So if our audio model fails, there would be around 3 seconds silence (no hit) ; but our visual model should
+    # detect these! Therefore, we say if there was no hit recognized in the audio model in 2 seconds, we
+    # check in the visual model and take the hits recognized there
+
+    thresh = fps * 2 # 2 seconds
+
+    
+    for idx in range(0, len(ball_shots_frames_audio) - 1, 1):
+        if ball_shots_frames_audio[idx + 1 ] - ball_shots_frames_audio[idx] > thresh:
+            # Find the range in ball_shots_frames
+            for i in ball_shots_frames:
+                if i in [x for x in range(ball_shots_frames_audio[idx], ball_shots_frames_audio[idx +1])]:
+                    ball_shots_frames_final.add(i)
+
+                   
+
 
 
 
