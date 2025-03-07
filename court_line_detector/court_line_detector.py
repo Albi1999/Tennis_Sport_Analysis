@@ -4,6 +4,10 @@ import torchvision.models as models
 import cv2 
 import numpy as np
 from scipy.spatial import distance
+from scipy.optimize import linear_sum_assignment
+from filterpy.kalman import KalmanFilter
+from skimage.measure import ransac
+from skimage.transform import ProjectiveTransform
 
 
 class CourtLineDetector:
@@ -27,6 +31,86 @@ class CourtLineDetector:
             transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])]
         )
 
+        # Initialize Kalman filter for keypoint tracking
+        self.kf = KalmanFilter(dim_x=28, dim_z=28)
+        self.kf.F = np.eye(28)  # State transition matrix
+        self.kf.H = np.eye(28)  # Observation matrix
+        self.kf.P *= 1e2  # Covariance matrix
+        self.kf.R *= 1e-1  # Measurement noise
+        self.kf.Q *= 1e-3  # Process noise
+        
+        # Initialize Optical Flow Tracking
+        self.prev_gray = None
+        self.prev_keypoints = None
+
+    def detect_keypoints(self, frame):
+        """
+        Detect the keypoints of the tennis court based on our model on a single frame.
+        
+        args:
+            frame : input frame.
+        
+        returns:
+            keypoints (np.array) : Array of the keypoints.
+        """
+        img_tensor = self.transforms(frame).unsqueeze(0)
+        img_tensor = img_tensor.to(self.machine)
+        
+        with torch.no_grad():
+            output = self.model(img_tensor).cpu().numpy().flatten()
+        
+        keypoints = output.reshape(-1, 2)
+        keypoints = self.kalman_smooth(keypoints)
+        return keypoints
+
+    def kalman_smooth(self, keypoints):
+        """
+        Smooth the keypoints using a Kalman filter.
+        """
+        if hasattr(self, 'prev_keypoints'):
+            self.kf.predict()
+            self.kf.update(keypoints.flatten())
+            keypoints = self.kf.x.reshape(-1, 2)
+        self.prev_keypoints = keypoints
+        return keypoints
+    
+    def track_keypoints_optical_flow(self, frame):
+        """
+        Track the keypoints using optical flow on a single frame.
+
+        Args:
+            frame : input frame.
+
+        Returns:
+            new_keypoints (np.array) : Array of the new keypoints
+        
+        """
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if self.prev_gray is None or self.prev_keypoints is None:
+            self.prev_gray = gray
+            return self.prev_keypoints
+        
+        new_keypoints, status, _ = cv2.calcOpticalFlowPyrLK(
+            self.prev_gray, gray, np.float32(self.prev_keypoints), None,
+            winSize=(15, 15), maxLevel=2,
+            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03)
+        )
+        
+        self.prev_gray = gray
+        self.prev_keypoints = new_keypoints
+        return new_keypoints
+    
+    def estimate_homography(self, keypoints, reference_pts):
+        """
+        Estimate the homography matrix between the detected keypoints and the reference points.
+
+        Args:
+            keypoints (np.array) : Detected keypoints.
+            reference_pts (np.array) : Reference points.
+        """
+        model, inliers = ransac((keypoints, reference_pts), ProjectiveTransform, min_samples=4,
+                                residual_threshold=2, max_trials=1000)
+        return model.params if model else None
 
     
     def predict(self, frame):
@@ -70,7 +154,7 @@ class CourtLineDetector:
         Returns:
             refined_keypoints (np.array): Post-processed keypoints.
         """
-        refined_keypoints = self.refine_keypoints(frame, keypoints)
+        refined_keypoints = self.refine_keypoints(keypoints)
 
         # Ensure keypoints are unique
         unique_keypoints = []
@@ -83,32 +167,22 @@ class CourtLineDetector:
 
         return np.array(unique_keypoints, dtype=np.float32)
 
-    def refine_keypoints(self, image, keypoints):
+    def refine_keypoints(self, keypoints):
         """
         Refine keypoints by aligning them to the nearest line intersection.
 
         Args:
-            image (np.array): Input image.
-            keypoints (list): Initial keypoints.
+            keypoints (list): Keypoints.
             
         Returns:
-            refined_keypoints (list): List of refined keypoints.
+            refined_kps (array): Array of refined keypoints.
         """
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        lines = self.detect_lines(gray)
-        merged_lines = self.merge_lines(lines)
-        intersections = self.find_intersections(merged_lines)
-
-        refined_keypoints = []
-        for x, y in keypoints:
-            if intersections:
-                dists = [distance.euclidean((x, y), inter) for inter in intersections]
-                closest_inter = intersections[np.argmin(dists)]
-                refined_keypoints.append(closest_inter)
-            else:
-                refined_keypoints.append((x, y))  # Fallback if no intersections found
-
-        return np.array(refined_keypoints, dtype=np.float32)
+        refined_kps = []
+        for kp in keypoints:
+            close_kps = [p for p in keypoints if distance.euclidean(kp, p) < 20]
+            avg_kp = np.mean(close_kps, axis=0) if close_kps else kp
+            refined_kps.append(avg_kp)
+        return np.array(refined_kps)
 
     def detect_lines(self, image):
         """

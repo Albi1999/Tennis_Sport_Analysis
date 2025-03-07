@@ -12,3 +12,5 @@ ultralytics
 supervision
 torchvision
 plotly
+scikit-image
+filterpy
