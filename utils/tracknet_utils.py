@@ -155,7 +155,6 @@ def remove_outliers_final(ball_track, thresh = 100, consecutive_frames = 3):
     
     """
 
-    # TRACKNET : final outlier removal
     dists = []
     # Recalculate distances of each point pair
     for i in range(0, len(ball_track) - 1):
@@ -167,7 +166,7 @@ def remove_outliers_final(ball_track, thresh = 100, consecutive_frames = 3):
             dist = None 
             dists.append(None)
 
-        if dist is not None and dist > thresh:
+        if dist is not None and dist > thresh and i >= consecutive_frames:
             check_distances = [dists[x] for x in range(i - consecutive_frames, i)]
             check_distances = list(filter(lambda a : a is not None, check_distances))
             if np.average(check_distances) <= thresh:

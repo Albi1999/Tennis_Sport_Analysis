@@ -172,9 +172,9 @@ def main():
     output_frames = courtline_detector.draw_keypoints_on_video(output_frames, refined_keypoints)
 
 
-    # Draw frame number (top left corner)
-    for i, frame in enumerate(output_frames):
-        cv2.putText(frame, f"Frame n {i}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
+    # Draw frame number (top left corner) # TODO : just to check where the ball lands and to hard code it , then remove for actual training data!!
+  #  for i, frame in enumerate(output_frames):
+  #      cv2.putText(frame, f"Frame n {i}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
 
     # Scrape data
     # Please make a list for EACH video, in case we have to rerun for some reason (that we then dont have to )
@@ -185,7 +185,7 @@ def main():
     output_path_line = 'data/trajectory_model_dataset/lines'
 
     # CHANGE HERE PATH
- #   scraping_data(video_n = 101, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_ground_hits_v_101, ball_shots_frames = ball_shots_frames, trace = trace)
+    scraping_data(video_n = 101, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_ground_hits_v_101, ball_shots_frames = ball_shots_frames, trace = trace)
 
     # change accordingly if on line or on circles
   #  train,val,test = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')

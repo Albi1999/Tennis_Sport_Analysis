@@ -72,6 +72,9 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
                     break
                 f = os.path.join(output_path_bounce, f"{video_n}_frame_{i}.jpg")
                 cv2.imwrite(f, input_frames[i])
+                # DATA AUGMENTATION : FLIP VERTICALLY (since we have about 2:1 no bounce to bounce ratio)
+                f = os.path.join(output_path_bounce, f"{video_n}_frame_flipped_{i}.jpg")
+                cv2.imwrite(f, cv2.flip(input_frames[i],1))
 
 
         # TODO : maybe even extend bounce_frames_curr by like 2 frames before, because that is where the ball already falls into the more v shape thing

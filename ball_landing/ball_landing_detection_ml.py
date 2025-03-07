@@ -1,5 +1,3 @@
-# TODO : check all
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,11 +5,15 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import cv2 
+import os 
+
 
 class BounceCNN(nn.Module):
     def __init__(self):
         super(BounceCNN, self).__init__()
 
+
+        # TODO :maybe avg pooling due to finding patterns ? 
         # 1st block
         self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(32)
@@ -32,6 +34,8 @@ class BounceCNN(nn.Module):
         self.bn4 = nn.BatchNorm2d(256)
         self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
         
+
+        # TODO : do we go for fixed input sizes ?
         # Adaptive pooling to ensure fixed size regardless of input dimensions
         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
         
@@ -78,7 +82,7 @@ class BounceDataset(Dataset):
     
     def __getitem__(self, idx):
         image = cv2.imread(self.image_paths[idx])
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert to RGB
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  
         
         if self.transform:
             image = self.transform(image)
@@ -92,7 +96,7 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
     model = model.to(device)
     
     # Define loss and optimizer
-    criterion = nn.BCELoss() # TODO : ADD WEIGHTING FOR CLASS IMBALANCE (if still persistent)
+    criterion = nn.BCELoss() # TODO : ADD WEIGHTING FOR CLASS IMBALANCE (if we still have it)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
     
@@ -115,7 +119,7 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
             optimizer.step()
             
             train_loss += loss.item()
-            predicted = (outputs > 0.5).float()
+            predicted = (outputs > 0.5).float() 
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
         
@@ -150,30 +154,73 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
         # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), 'best_bounce_model.pth')
+            torch.save(model.state_dict(), 'models/best_bounce_model.pth')
     
     return model
+
 
 
 if __name__ == "__main__":
     # Define transformations
     transform = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.Resize((224, 224)),
+        transforms.Resize((224, 224)), # TODO : do we want to resize or do we lose too much information ? check !
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # Replace with mean/std of our data (? how to find that)
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) #TODO : Replace with mean/std of our data (? how to find that)
     ])
+
+
+    bounce_circles_train_dir = 'data/trajectory_model_dataset/circles/train/bounce'
+    no_bounce_circles_train_dir = 'data/trajectory_model_dataset/circles/train/no_bounce'
+
+    bounce_circles_val_dir = 'data/trajectory_model_dataset/circles/val/bounce'
+    no_bounce_circles_val_dir = 'data/trajectory_model_dataset/circles/val/no_bounce'
+
+    bounce_circles_test_dir = 'data/trajectory_model_dataset/circles/test/bounce'
+    no_bounce_circles_test_dir = 'data/trajectory_model_dataset/circles/test/no_bounce'
+
+    # Get file names
+    bounce_train_files = os.listdir(bounce_circles_train_dir)
+    no_bounce_train_files = os.listdir(no_bounce_circles_train_dir)
+
+    bounce_val_files = os.listdir(bounce_circles_val_dir)
+    no_bounce_val_files = os.listdir(no_bounce_circles_val_dir)
+
+    bounce_test_files = os.listdir(bounce_circles_test_dir)
+    no_bounce_test_files = os.listdir(no_bounce_circles_test_dir)
+
+    # Create full paths for each file
+    bounce_train = [os.path.join(bounce_circles_train_dir, file) for file in bounce_train_files]
+    no_bounce_train = [os.path.join(no_bounce_circles_train_dir, file) for file in no_bounce_train_files]
+
+    bounce_val = [os.path.join(bounce_circles_val_dir, file) for file in bounce_val_files]
+    no_bounce_val = [os.path.join(no_bounce_circles_val_dir, file) for file in no_bounce_val_files]
+
+    bounce_test = [os.path.join(bounce_circles_test_dir, file) for file in bounce_test_files]
+    no_bounce_test = [os.path.join(no_bounce_circles_test_dir, file) for file in no_bounce_test_files]
+
+
+    image_paths_train = bounce_train + no_bounce_train
+    labels_train = [1 for x in range(len(bounce_train))] + [0 for x in range(len(no_bounce_train))]
+
+
+    image_paths_val = bounce_val + no_bounce_val
+    labels_val = [1 for x in range(len(bounce_val))] + [0 for x in range(len(no_bounce_val))]
+
+
+    image_paths_test = bounce_test + no_bounce_test
+    labels_test = [1 for x in range(len(bounce_test))] + [0 for x in range(len(no_bounce_test))]
     
     # Create datasets
     train_dataset = BounceDataset(
-        image_paths=["train_image_1.jpg", "train_image_2.jpg"], # REPLACE
-        labels=[0, 1],  # REPLACE WITH LABELS
+        image_paths= image_paths_train,
+        labels= labels_train,
         transform=transform
     )
     
     val_dataset = BounceDataset(
-        image_paths=["val_image_1.jpg", "val_image_2.jpg"],
-        labels=[0, 1],
+        image_paths=image_paths_val,
+        labels=labels_val,
         transform=transform
     )
     
