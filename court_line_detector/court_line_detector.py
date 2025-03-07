@@ -1,4 +1,4 @@
-import torch 
+import torch
 import torchvision.transforms as transforms 
 import torchvision.models as models 
 import cv2 
@@ -11,47 +11,52 @@ from skimage.transform import ProjectiveTransform
 
 
 class CourtLineDetector:
-    def __init__(self, model_path, machine = 'cpu'):
+    def __init__(self, model_path, machine='cpu'):
+        """
+        Initialize the CourtLineDetector with the trained model.
         
-
+        Args:
+            model_path (str): Path to the trained model.
+            machine (str): Device to use ('cpu' or 'cuda').
+        """
         self.machine = machine
-        # Initialize our trained courtline keypoints detection model
-        self.model = models.resnet50(pretrained = False)
-        self.model.fc = torch.nn.Linear(self.model.fc.in_features, 14*2)
-        self.model.load_state_dict(torch.load(model_path, map_location = self.machine))
-
-
-        # Transformations for input frames (same as when we trained the model)
-        self.transforms = transforms.Compose(
-            [transforms.ToPILImage(),
-            transforms.Resize((224,224)),
-            transforms.ToTensor(),
-            # Normalize using the mean & std of ImageNet (since we use a
-            # ResNet50 model, which was trained on ImageNet)
-            transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])]
-        )
-
-        # Initialize Kalman filter for keypoint tracking
-        self.kf = KalmanFilter(dim_x=28, dim_z=28)
-        self.kf.F = np.eye(28)  # State transition matrix
-        self.kf.H = np.eye(28)  # Observation matrix
-        self.kf.P *= 1e2  # Covariance matrix
-        self.kf.R *= 1e-1  # Measurement noise
-        self.kf.Q *= 1e-3  # Process noise
         
-        # Initialize Optical Flow Tracking
-        self.prev_gray = None
-        self.prev_keypoints = None
-
+        # Load the trained courtline keypoints detection model
+        self.model = models.resnet50(pretrained=False)
+        self.model.fc = torch.nn.Linear(self.model.fc.in_features, 14*2)
+        self.model.load_state_dict(torch.load(model_path, map_location=self.machine))
+        self.model.eval()
+        
+        # Transformations for input frames
+        self.transforms = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        
+        # Initialize Keypoint Tracking
+        self.initial_keypoints = None  # Store initial detected keypoints
+        self.prev_gray = None  # Previous grayscale frame
+        self.prev_keypoints = None  # Previous keypoints
+        
+        # Reference keypoints for a standard tennis court
+        self.reference_court_pts = np.array([
+            [100, 100], [500, 100], [100, 400], [500, 400],
+            [200, 150], [400, 150], [200, 350], [400, 350],
+            [300, 100], [300, 400], [150, 250], [450, 250],
+            [250, 250], [350, 250]
+        ])
+    
     def detect_keypoints(self, frame):
         """
-        Detect the keypoints of the tennis court based on our model on a single frame.
+        Detect the keypoints of the tennis court based on the trained model.
         
-        args:
-            frame : input frame.
+        Args:
+            frame (np.array): Input frame.
         
-        returns:
-            keypoints (np.array) : Array of the keypoints.
+        Returns:
+            np.array: Detected keypoints.
         """
         img_tensor = self.transforms(frame).unsqueeze(0)
         img_tensor = img_tensor.to(self.machine)
@@ -60,57 +65,30 @@ class CourtLineDetector:
             output = self.model(img_tensor).cpu().numpy().flatten()
         
         keypoints = output.reshape(-1, 2)
-        keypoints = self.kalman_smooth(keypoints)
+        keypoints = self.snap_keypoints_to_template(frame, keypoints)
         return keypoints
 
-    def kalman_smooth(self, keypoints):
-        """
-        Smooth the keypoints using a Kalman filter.
-        """
-        if hasattr(self, 'prev_keypoints'):
-            self.kf.predict()
-            self.kf.update(keypoints.flatten())
-            keypoints = self.kf.x.reshape(-1, 2)
-        self.prev_keypoints = keypoints
-        return keypoints
     
-    def track_keypoints_optical_flow(self, frame):
+    def snap_keypoints_to_template(self, frame, keypoints):
         """
-        Track the keypoints using optical flow on a single frame.
-
+        Align detected keypoints to the predefined court template.
+        
         Args:
-            frame : input frame.
-
+            frame (np.array): Input frame.
+            keypoints (np.array): Detected keypoints.
+        
         Returns:
-            new_keypoints (np.array) : Array of the new keypoints
-        
+            np.array: Aligned keypoints.
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if self.prev_gray is None or self.prev_keypoints is None:
-            self.prev_gray = gray
-            return self.prev_keypoints
+        if len(keypoints) != len(self.reference_court_pts):
+            return keypoints  # Ensure we have the right number of keypoints
         
-        new_keypoints, status, _ = cv2.calcOpticalFlowPyrLK(
-            self.prev_gray, gray, np.float32(self.prev_keypoints), None,
-            winSize=(15, 15), maxLevel=2,
-            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03)
-        )
+        cost_matrix = distance.cdist(keypoints, self.reference_court_pts)
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        ordered_keypoints = self.reference_court_pts[col_ind]
         
-        self.prev_gray = gray
-        self.prev_keypoints = new_keypoints
-        return new_keypoints
-    
-    def estimate_homography(self, keypoints, reference_pts):
-        """
-        Estimate the homography matrix between the detected keypoints and the reference points.
+        return np.array(ordered_keypoints)
 
-        Args:
-            keypoints (np.array) : Detected keypoints.
-            reference_pts (np.array) : Reference points.
-        """
-        model, inliers = ransac((keypoints, reference_pts), ProjectiveTransform, min_samples=4,
-                                residual_threshold=2, max_trials=1000)
-        return model.params if model else None
 
     
     def predict(self, frame):
@@ -122,7 +100,6 @@ class CourtLineDetector:
 
         Returns:
             keypoints (np.array) : Array of the keypoints.
-        
         """
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         image_tensor = self.transforms(img_rgb).unsqueeze(0)
@@ -184,89 +161,7 @@ class CourtLineDetector:
             refined_kps.append(avg_kp)
         return np.array(refined_kps)
 
-    def detect_lines(self, image):
-        """
-        Detect lines in the image using Hough Transform.
-        
-        Args:
-            image (np.array): Input grayscale image.
-            
-        Returns:
-            lines (list): Detected lines.
-        """
-        edges = cv2.Canny(image, 50, 150, apertureSize=3)
-        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 30, minLineLength=20, maxLineGap=10)
-        return lines if lines is not None else []
 
-    def merge_lines(self, lines):
-        """
-        Merge similar lines based on proximity.
-
-        Args:
-            lines (list): List of detected lines.
-            
-        Returns:
-            merged_lines (list): Merged lines.
-        """
-        if len(lines) == 0:
-            return []
-
-        merged_lines = []
-        used = set()
-        
-        for i, line1 in enumerate(lines):
-            if i in used:
-                continue
-            x1, y1, x2, y2 = line1[0]
-            merged = [x1, y1, x2, y2]
-            count = 1
-            
-            for j, line2 in enumerate(lines):
-                if i != j and j not in used:
-                    x3, y3, x4, y4 = line2[0]
-                    if distance.euclidean((x1, y1), (x3, y3)) < 10 and distance.euclidean((x2, y2), (x4, y4)) < 10:
-                        merged[0] += x3
-                        merged[1] += y3
-                        merged[2] += x4
-                        merged[3] += y4
-                        count += 1
-                        used.add(j)
-            
-            merged = [int(v / count) for v in merged]
-            merged_lines.append(merged)
-        
-        return merged_lines
-
-    def find_intersections(self, lines):
-        """
-        Find intersections between detected lines.
-
-        Args:
-            lines (list): List of detected lines.
-            
-        Returns:
-            intersections (list): List of intersection points.
-        """
-        intersections = []
-        
-        for i, line1 in enumerate(lines):
-            for j, line2 in enumerate(lines):
-                if i >= j:
-                    continue
-                x1, y1, x2, y2 = line1
-                x3, y3, x4, y4 = line2
-
-                denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-                if denom == 0:
-                    continue  # Parallel lines
-
-                px = ((x1*y2 - y1*x2) * (x3 - x4) - (x1 - x2) * (x3*y4 - y3*x4)) / denom
-                py = ((x1*y2 - y1*x2) * (y3 - y4) - (y1 - y2) * (x3*y4 - y3*x4)) / denom
-
-                if 0 <= px <= 640 and 0 <= py <= 480:  # Assuming the frame size
-                    intersections.append((int(px), int(py)))
-
-        return intersections
 
     def draw_keypoints(self, frame, refined_keypoints):
         """
@@ -278,20 +173,9 @@ class CourtLineDetector:
 
         Returns:
             frame : the frame annotated with the keypoints
-        
         """
-        # Precedent function to draw keypoints on the frame
-        #for i in range(0, len(keypoints), 2):
-        #    x = int(keypoints[i])
-        #    y = int(keypoints[i+1])
-
-        #    cv2.putText(frame, f"K {str(i//2)}", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
-        #    cv2.circle(frame, (x,y), 5, (0,255,0), -1) # -1 such that it is filled
-
-        #return frame 
         for i, (x, y) in enumerate(refined_keypoints): # Draw the refined keypoints
             x, y = int(x), int(y) 
-        #    cv2.putText(frame, f"{i}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2) # Put the keypoint number
             cv2.circle(frame, (x, y), 2, (0, 255, 0), -1) # Draw the keypoint
         return frame
 
@@ -306,7 +190,6 @@ class CourtLineDetector:
 
         Returns:
             output_video_frames : all frames, annotated with the found keypoints
-        
         """
         output_video_frames = []
 
@@ -321,11 +204,15 @@ class CourtLineDetector:
 
     def draw_lines_between_keypoints(self, frame, keypoints):
         """
-        
         Draw lines between the keypoints 
-        
-        """
 
+        Args:
+            frame : input frame.
+            keypoints : given keypoints.
+
+        Returns:
+            frame : the frame annotated with the lines between the keypoints
+        """
         # Convert keypoints into tuples of integers
         keypoints = keypoints.astype(np.int32).tolist()
 
@@ -351,7 +238,6 @@ class CourtLineDetector:
         cv2.line(frame, keypoints[8], keypoints[9], color=(0,255,0), thickness= 1)
         # 12 & 13
         cv2.line(frame, keypoints[12], keypoints[13], color=(0,255,0), thickness= 1)
-
 
         return frame 
 
