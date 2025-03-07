@@ -144,53 +144,96 @@ def interpolation(coords):
     return track
 
 
+def remove_outliers_final(ball_track, thresh = 100, consecutive_frames = 3):
+    """
+    
+    After interpolation, still some outliers : we now
+    check for consecutive frames where the ball
+    is tracked closely to each other and then use
+    this as the reference point for replacing
+    outliers.
+    
+    """
+
+    # TRACKNET : final outlier removal
+    dists = []
+    # Recalculate distances of each point pair
+    for i in range(0, len(ball_track) - 1):
+        # Check that it is not None
+        if ball_track[i][0] and ball_track[i+1][0]:
+            dist = euclidean_distance(ball_track[i], ball_track[i+1])
+            dists.append(dist)
+        else:
+            dist = None 
+            dists.append(None)
+
+        if dist is not None and dist > thresh:
+            check_distances = [dists[x] for x in range(i - consecutive_frames, i)]
+            check_distances = list(filter(lambda a : a is not None, check_distances))
+            if np.average(check_distances) <= thresh:
+                ball_track[i + 1] = ball_track[i]
+                # Reset the last calculated distance
+                dists[-1] = 0
+
+
+
+
+    return ball_track
+
+
+
+
+
+        
+
+
+
+
 
 def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'circle'):
 
-    ball_shots_frames_original = deepcopy(ball_shots_frames)
-    # First, extend the ball_shots_frames 
-    for i in ball_shots_frames_original:
-        for j in range(i, i + trace//2):
-            ball_shots_frames.append(j)
     # Use a set (because it has lookup in O(1))
     ball_shots_frames = set(ball_shots_frames)
     
     output_video_frames = []
+    curr_rack_hit = -1000
     for num in range(len(frames)):
         frame = frames[num].copy()
-        # Reset tracker whenever we have a racket hit (and for the next "trace" amount of frames)
-        
-        if num in ball_shots_frames:
-                if ball_track[num][0]:
-                    x = int(ball_track[num][0])
-                    y = int(ball_track[num][1])
-                    frame = cv2.circle(frame, (x,y), radius=0, color=(0, 0, 255), thickness= 4)
+
                     
 
 
         # Draw trace of the ball
-        else:
-            # Store valid points we find
-            valid_points = []
-            
-            # Collect valid points first
-            for i in range(trace):
-                if (num-i > 0) and ball_track[num-i][0]:
+  
+        # Store valid points we find
+        valid_points = []
+        # Save the closest current racket hit
+        if num in ball_shots_frames:
+            curr_rack_hit = num 
+        # Collect valid points first
+        for i in range(trace):
+            if (num-i > 0) and ball_track[num-i][0]:
+                # Check if there was a racket hit ; we want to reset the trace for each racket hit (such that is doesn't track the "weird"
+                # patterns pre&post hit)
+                # Only track starting every time from the racket hit 
+                if (num-i) < curr_rack_hit:
+                    pass 
+                else:
                     x = int(ball_track[num-i][0])
                     y = int(ball_track[num-i][1])
                     valid_points.append((x, y))
-                else:
-                    break
-            
-            # Draw circles for all valid points
-            if draw_mode == 'circle':
-                for point in valid_points:
-                    frame = cv2.circle(frame, point, radius=0, color=(0, 0, 255), thickness=4)
-            
-            elif draw_mode == 'line':
-                # Draw lines between consecutive points
-                for i in range(1, len(valid_points)):
-                    frame = cv2.line(frame, valid_points[i], valid_points[i-1], color=(0, 0, 255), thickness=3)
+            else:
+                break
+        
+        # Draw circles for all valid points
+        if draw_mode == 'circle':
+            for point in valid_points:
+                frame = cv2.circle(frame, point, radius=0, color=(0, 0, 255), thickness=4)
+        
+        elif draw_mode == 'line':
+            # Draw lines between consecutive points
+            for i in range(1, len(valid_points)):
+                frame = cv2.line(frame, valid_points[i], valid_points[i-1], color=(0, 0, 255), thickness=3)
 
         output_video_frames.append(frame)
     return output_video_frames
@@ -234,8 +277,6 @@ def get_ball_shot_frames_visual(ball_positions_minicourt):
 
     return hit_frames
     
-
-
 
 def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     # Load the audio file
@@ -322,23 +363,31 @@ def combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps):
         we want to use these frames as our reference points
     """
     
+ 
     # use a set to not have any duplicates
     ball_shots_frames_final = set()
 
     # Add initial hit
     ball_shots_frames_final.add(ball_shots_frames_audio[0])
 
+
+
+    ## GET AUDIO FRAME
+
     # We now iterate through the found direction changes and see if we can find
-    # a close frame hit also in the audio
+    # a close frame hit also in the audio ; audio gives us the best approximation of 
+    # correct frame 
     for i in ball_shots_frames:
         for j in ball_shots_frames_audio:
-            if i - 10 < j < i + 10:
+            if i - fps < j < i + fps: # maybe less than fps
                 ball_shots_frames_final.add(j)
+
+
+
+    ## GAP CHECKING 
 
     # Next, we need to take into account that there will be more silent hits that our audio model might not recognize, but are recognized by the change of direction model
     # Therefore, we check if we have large gaps in the audio results where we have some results of the change of direction model
-
-
 
     # Iterate through the audio frame in 2 (checking always pairs)
     # As a rough base, a hit should occur every 1.5 seconds (roughly), when players play from the very back;
@@ -357,9 +406,6 @@ def combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps):
                     ball_shots_frames_final.add(i)
 
                    
-
-
-
 
     ball_shots_frames_final = sorted(list(ball_shots_frames_final))
     return ball_shots_frames_final

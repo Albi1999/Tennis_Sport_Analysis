@@ -14,6 +14,7 @@ from utils import (read_video,
                    euclidean_distance,
                    convert_pixel_distance_to_meters,
                    draw_player_stats,
+                   remove_outliers_final,
                    create_black_video,
                    scraping_data,
                    splitting_data)
@@ -110,11 +111,9 @@ def main():
 
 
 
-
+        # Final removal of outliers based on distances after initial interpolation method
+        ball_detections = remove_outliers_final(ball_detections, thresh= 100)
         
-
-        
-    
 
             
         
@@ -140,10 +139,12 @@ def main():
 
     # Get racket hits 
     ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = False)
-    ball_shots_frames = get_ball_shot_frames_visual(ball_mini_court_detections)
-    ball_shots_frames = combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps)
+    ball_shots_frames_visual = get_ball_shot_frames_visual(ball_mini_court_detections)
+    ball_shots_frames = combine_visual_audio(ball_shots_frames_visual, ball_shots_frames_audio, fps)
 
-    print(ball_shots_frames)
+    print("Ball Shots from Audio : ", ball_shots_frames_audio)
+    print("Ball Shots from Visual : ", ball_shots_frames_visual)
+    print("Ball Shots Combined Algorithm :", ball_shots_frames)
 
     
     # Draw Output
@@ -172,8 +173,8 @@ def main():
 
 
     # Draw frame number (top left corner)
-    #for i, frame in enumerate(output_frames):
-    #    cv2.putText(frame, f"Frame n {i}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
+    for i, frame in enumerate(output_frames):
+        cv2.putText(frame, f"Frame n {i}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
 
     # Scrape data
     # Please make a list for EACH video, in case we have to rerun for some reason (that we then dont have to )
