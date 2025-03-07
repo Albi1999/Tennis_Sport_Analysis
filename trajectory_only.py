@@ -27,6 +27,7 @@ import torch
 from copy import deepcopy
 import pandas as pd
 import info
+import pickle
 
 
 
@@ -35,7 +36,7 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    video_number = 101
+    video_number = 100
     input_video_path = f'data/input_video{video_number}.mp4'  # Toy example
     #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
 
@@ -67,26 +68,20 @@ def main():
 
     # Detect & Track Players
     player_detections = player_tracker.detect_frames(video_frames,
-                                                     read_from_stub = True,
+                                                     read_from_stub = False,
                                                      stub_path = 'tracker_stubs/player_detections.pkl')
 
 
     if ball_tracker_method == 'tracknet':
 
-        # TODO : fix the few points that are weirdly tracked ; 
-        # should already be fixed with remove_outliers, but
-        # maybe the interpolation then gets them back?
-        # it seems to be easy fixable with just distance between tracks,
-        # given we find some consistent track over some frames in the beginning
-
         # TODO : Put all of this in a class call like above
         # Calculate the correct scale factor for scaling back 
         # with TrackNet, we scaled to 640 width, 360 height
 
-        import pickle
+        
         stub_path = 'tracker_stubs/tracknet_ball_detections.pkl'
         dists_path =  'tracker_stubs/tracknet_ball_dists.pkl'
-        read = True # read from stub
+        read = False # read from stub
         if stub_path is not None and read == True:
             with open(stub_path, 'rb') as f:
                 ball_detections = pickle.load(f)
@@ -139,7 +134,7 @@ def main():
 
     # Get racket hits 
     ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = False)
-    ball_shots_frames_visual = get_ball_shot_frames_visual(ball_mini_court_detections)
+    ball_shots_frames_visual = get_ball_shot_frames_visual(ball_mini_court_detections, fps)
     ball_shots_frames = combine_visual_audio(ball_shots_frames_visual, ball_shots_frames_audio, fps)
 
     print("Ball Shots from Audio : ", ball_shots_frames_audio)
@@ -178,6 +173,9 @@ def main():
 
     # Scrape data
     # Please make a list for EACH video, in case we have to rerun for some reason (that we then dont have to )
+
+
+    """
     ball_ground_hits_v_101 = [45,75,102,131,163,195,222,253,295]
 
 
@@ -189,6 +187,8 @@ def main():
 
     # change accordingly if on line or on circles
   #  train,val,test = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+    """
+
 
     # Save video
     save_video(output_frames, output_video_path, fps)

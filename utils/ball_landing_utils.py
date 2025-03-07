@@ -17,8 +17,8 @@ def create_black_video(output_path, width, height, fps, frame_count):
         frame_count: Total number of frames
     """
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+  #  if not os.path.exists(output_path):
+  #      os.makedirs(output_path)
     # Define codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # You can also use 'XVID'
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))

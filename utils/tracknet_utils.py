@@ -238,7 +238,7 @@ def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'c
     return output_video_frames
     
 
-def get_ball_shot_frames_visual(ball_positions_minicourt):
+def get_ball_shot_frames_visual(ball_positions_minicourt, fps):
     """Based on change of direction in the mini court coordinates"""
 
 
@@ -252,15 +252,15 @@ def get_ball_shot_frames_visual(ball_positions_minicourt):
    # plt.plot(df_ball_positions['delta_y'])
    # plt.savefig("SHOTS.png")
 
-    minimum_change_frames_for_hit = 20 # for this amount of frames it has to keep the changed direction
-                                       # to be considered a hit
-    for i in range(1,len(df_ball_positions)- int(minimum_change_frames_for_hit*1.2) ):
+    minimum_change_frames_for_hit = fps//2 # for this amount of frames it has to keep the changed direction
+                                           # to be considered a hit
+    for i in range(1,len(df_ball_positions)- int(minimum_change_frames_for_hit) ):
         negative_position_change = df_ball_positions['delta_y'].iloc[i] >0 and df_ball_positions['delta_y'].iloc[i+1] <0
         positive_position_change = df_ball_positions['delta_y'].iloc[i] <0 and df_ball_positions['delta_y'].iloc[i+1] >0
 
         if negative_position_change or positive_position_change:
             change_count = 0 
-            for change_frame in range(i+1, i+int(minimum_change_frames_for_hit*1.2)+1):
+            for change_frame in range(i+1, i+int(minimum_change_frames_for_hit)+1):
                 negative_position_change_following_frame = df_ball_positions['delta_y'].iloc[i] >0 and df_ball_positions['delta_y'].iloc[change_frame] <0
                 positive_position_change_following_frame = df_ball_positions['delta_y'].iloc[i] <0 and df_ball_positions['delta_y'].iloc[change_frame] >0
 
@@ -299,7 +299,7 @@ def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     # Lower height threshold to catch more peaks
     peaks, _ = find_peaks(y_envelope, 
                         height=0.02,  # Lower threshold to catch more peaks
-                        distance=int(0.3 * sr),  # Minimum distance between peaks
+                        distance=int(0.5 * sr),  # Minimum distance between peaks
                         prominence=0.01)  # Find all distinct peaks 
     
     # Convert peak positions to time (seconds)
