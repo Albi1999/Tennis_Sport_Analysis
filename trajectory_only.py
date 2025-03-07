@@ -14,6 +14,7 @@ from utils import (read_video,
                    euclidean_distance,
                    convert_pixel_distance_to_meters,
                    draw_player_stats,
+                   remove_outliers_final,
                    create_black_video,
                    scraping_data,
                    splitting_data)
@@ -110,11 +111,9 @@ def main():
 
 
 
-
+        # Final removal of outliers based on distances after initial interpolation method
+        ball_detections = remove_outliers_final(ball_detections, thresh= 100)
         
-
-        
-    
 
             
         

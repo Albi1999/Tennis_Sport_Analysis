@@ -144,6 +144,51 @@ def interpolation(coords):
     return track
 
 
+def remove_outliers_final(ball_track, thresh = 100, consecutive_frames = 3):
+    """
+    
+    After interpolation, still some outliers : we now
+    check for consecutive frames where the ball
+    is tracked closely to each other and then use
+    this as the reference point for replacing
+    outliers.
+    
+    """
+
+    # TRACKNET : final outlier removal
+    dists = []
+    # Recalculate distances of each point pair
+    for i in range(0, len(ball_track) - 1):
+        # Check that it is not None
+        if ball_track[i][0] and ball_track[i+1][0]:
+            dist = euclidean_distance(ball_track[i], ball_track[i+1])
+            dists.append(dist)
+        else:
+            dist = None 
+            dists.append(None)
+
+        if dist is not None and dist > thresh:
+            check_distances = [dists[x] for x in range(i - consecutive_frames, i)]
+            check_distances = list(filter(lambda a : a is not None, check_distances))
+            if np.average(check_distances) <= thresh:
+                ball_track[i + 1] = ball_track[i]
+                # Reset the last calculated distance
+                dists[-1] = 0
+
+
+
+
+    return ball_track
+
+
+
+
+
+        
+
+
+
+
 
 def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'circle'):
 

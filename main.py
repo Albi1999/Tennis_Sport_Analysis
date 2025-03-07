@@ -13,6 +13,7 @@ from utils import (read_video,
                    get_ball_shot_frames_visual,
                    euclidean_distance,
                    convert_pixel_distance_to_meters,
+                   remove_outliers_final,
                    draw_player_stats,
                    create_player_stats_box_video)
 from trackers import (PlayerTracker, BallTracker, BallTrackerNetTRACE)
@@ -104,6 +105,10 @@ def main():
     
         if AUDIO:
             ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
+
+
+        # Final removal of outliers based on distances after initial interpolation method
+        ball_detections = remove_outliers_final(ball_detections, thresh= 100)
             
         
         # Copy TrackNet ball_detections
