@@ -13,6 +13,7 @@ from collections import defaultdict
 from utils import euclidean_distance
 from copy import deepcopy
 import pandas as pd
+import pickle 
 
 
 
@@ -144,7 +145,7 @@ def interpolation(coords):
     return track
 
 
-def remove_outliers_final(ball_track, thresh = 100, consecutive_frames = 3):
+def remove_outliers_final(ball_track, thresh = 150, consecutive_frames = 3):
     """
     
     After interpolation, still some outliers : we now
@@ -168,8 +169,12 @@ def remove_outliers_final(ball_track, thresh = 100, consecutive_frames = 3):
 
         if dist is not None and dist > thresh and i >= consecutive_frames:
             check_distances = [dists[x] for x in range(i - consecutive_frames, i)]
+            # If there was any untracked distance (i.e. we lost tracking), we skip the 
+            # iteration (because we could now have a large distance that is correct)
+            if None in check_distances:
+                continue
             check_distances = list(filter(lambda a : a is not None, check_distances))
-            if np.average(check_distances) <= thresh:
+            if ball_track[i] is not None and np.average(check_distances) <= thresh:
                 ball_track[i + 1] = ball_track[i]
                 # Reset the last calculated distance
                 dists[-1] = 0
@@ -178,13 +183,6 @@ def remove_outliers_final(ball_track, thresh = 100, consecutive_frames = 3):
 
 
     return ball_track
-
-
-
-
-
-        
-
 
 
 
@@ -236,33 +234,75 @@ def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'c
 
         output_video_frames.append(frame)
     return output_video_frames
+
+
+def detect_frames_TRACKNET(video_frames, video_number, tracker, video_width, video_height, read_from_stub, stub_path):
+
+
+    if stub_path is not None and read_from_stub == True:
+        with open(stub_path, 'rb') as f:
+            ball_detections = pickle.load(f)
+        
+    if stub_path is not None and read_from_stub == False: 
+        # Calculate the correct scale factor for scaling back 
+        # with TrackNet, we scaled to 640 width, 360 height
+        scaling_x = video_width/640
+        scaling_y = video_height/360
+        ball_detections, dists = infer_model(video_frames, tracker, scale = (scaling_x, scaling_y))
+        ball_detections = remove_outliers(ball_detections, dists)
+        subtracks = split_track(ball_detections)
+        for r in subtracks:
+            ball_subtrack = ball_detections[r[0]:r[1]]
+            ball_subtrack = interpolation(ball_subtrack)
+            ball_detections[r[0]:r[1]] = ball_subtrack
+    
+        with open(stub_path, 'wb') as f:
+            pickle.dump(ball_detections, f)
+
+
+    # Final removal of outliers based on distances after initial interpolation method
+    ball_detections = remove_outliers_final(ball_detections, thresh= 300)
     
 
-def get_ball_shot_frames_visual(ball_positions_minicourt, fps):
+    # Copy TrackNet ball_detections
+    ball_detections_tracknet = ball_detections.copy()
+    ball_detections = convert_ball_detection_to_bbox(ball_detections)
+
+    return ball_detections, ball_detections_tracknet
+
+    
+
+def get_ball_shot_frames_visual(ball_positions, fps, area):
     """Based on change of direction in the mini court coordinates"""
 
 
-    ball_positions = [x.get(1,[]) for x in ball_positions_minicourt]
+  #  ball_positions = [x.get(1,[]) for x in ball_positions]
     df_ball_positions = pd.DataFrame(ball_positions,columns=['x','y'])
+    df_ball_positions = df_ball_positions.iloc[area[0]:area[1]]
     # Create a rolling window for the y positions
-    df_ball_positions['y_rolling_mean'] = df_ball_positions['y'].rolling(window=3, min_periods=1, center=False).mean()
+    window_size = max(5, fps // 10)  # Adaptive window size based on fps
+    df_ball_positions['y_rolling_mean'] = df_ball_positions['y'].rolling(window=window_size, min_periods=1, center=False).mean()
     df_ball_positions['delta_y'] = df_ball_positions['y_rolling_mean'].diff()
     df_ball_positions['ball_hit'] = 0
 
-   # plt.plot(df_ball_positions['delta_y'])
-   # plt.savefig("SHOTS.png")
+    plt.plot(df_ball_positions['delta_y'])
+    plt.savefig("VISUAL.png")
 
-    minimum_change_frames_for_hit = fps//2 # for this amount of frames it has to keep the changed direction
-                                           # to be considered a hit
-    for i in range(1,len(df_ball_positions)- int(minimum_change_frames_for_hit) ):
-        negative_position_change = df_ball_positions['delta_y'].iloc[i] >0 and df_ball_positions['delta_y'].iloc[i+1] <0
-        positive_position_change = df_ball_positions['delta_y'].iloc[i] <0 and df_ball_positions['delta_y'].iloc[i+1] >0
+
+
+    # Make this small to catch as much as possible
+    minimum_change_frames_for_hit = max(5, fps//20)
+
+
+    for i in range(1,len(df_ball_positions)- int(minimum_change_frames_for_hit)):
+        negative_position_change = df_ball_positions['y_rolling_mean'].iloc[i] >0 and df_ball_positions['y_rolling_mean'].iloc[i+1] <0
+        positive_position_change = df_ball_positions['y_rolling_mean'].iloc[i] <0 and df_ball_positions['y_rolling_mean'].iloc[i+1] >0
 
         if negative_position_change or positive_position_change:
             change_count = 0 
             for change_frame in range(i+1, i+int(minimum_change_frames_for_hit)+1):
-                negative_position_change_following_frame = df_ball_positions['delta_y'].iloc[i] >0 and df_ball_positions['delta_y'].iloc[change_frame] <0
-                positive_position_change_following_frame = df_ball_positions['delta_y'].iloc[i] <0 and df_ball_positions['delta_y'].iloc[change_frame] >0
+                negative_position_change_following_frame = df_ball_positions['y_rolling_mean'].iloc[i] >0 and df_ball_positions['y_rolling_mean'].iloc[change_frame] <0
+                positive_position_change_following_frame = df_ball_positions['y_rolling_mean'].iloc[i] <0 and df_ball_positions['y_rolling_mean'].iloc[change_frame] >0
 
                 if negative_position_change and negative_position_change_following_frame:
                     change_count+=1
@@ -275,6 +315,10 @@ def get_ball_shot_frames_visual(ball_positions_minicourt, fps):
     hit_frames = df_ball_positions[df_ball_positions['ball_hit']==1].index.tolist()
 
     return hit_frames
+
+
+
+
     
 
 def get_ball_shot_frames_audio(audio_file, fps, plot=False):
@@ -351,7 +395,55 @@ def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     return hit_frames 
 
 
-def combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps):
+
+
+def get_ball_shot_frames_audio_refinement(audio_file, fps, frames_start=None, frames_end=None, 
+                              peak_height=0.02, peak_prominence=0.01, peak_distance=0.5,
+                              plot=False):
+    # Load the audio file
+    y, sr = librosa.load(audio_file, sr=None)
+    
+    # Convert frame range to time range if specified
+    time_start = frames_start / fps if frames_start is not None else 0
+    time_end = frames_end / fps if frames_end is not None else len(y) / sr
+    
+    # Convert time range to sample indices
+    sample_start = int(time_start * sr)
+    sample_end = min(int(time_end * sr), len(y))
+    
+    # Extract the relevant section of audio
+    y_section = y[sample_start:sample_end]
+    
+    # Apply bandpass filter (150Hz-1800Hz)
+    nyquist = 0.5 * sr
+    low = 150 / nyquist
+    high = 1800 / nyquist
+    sos = butter(N=6, Wn=[low, high], btype='band', output='sos')
+    y_filtered = sosfilt(sos, y_section)
+    
+    # Compute the envelope of the filtered signal
+    y_abs = np.abs(y_filtered)
+    
+    # Apply smoothing to the envelope
+    window_size = int(0.01 * sr)  # 10ms window
+    y_envelope = np.convolve(y_abs, np.ones(window_size)/window_size, mode='same')
+    
+    # Find peaks in the envelope with customizable parameters
+    peaks, _ = find_peaks(y_envelope, 
+                        height=peak_height, 
+                        distance=int(peak_distance * sr),  
+                        prominence=peak_prominence) 
+    
+    # Convert peak positions to time (seconds), adding the start time offset
+    hit_times = (peaks / sr) + time_start
+    
+    # Convert times to frame numbers
+    hit_frames = [int(round(time * fps)) for time in hit_times]
+
+    return hit_frames
+
+
+def refine_audio(ball_shots_frames_audio, fps, audio_file):
     """ 
     Idea is :
         The first hit in each game is very loud and not registered by the "change of direction"
@@ -366,43 +458,38 @@ def combine_visual_audio(ball_shots_frames, ball_shots_frames_audio, fps):
     # use a set to not have any duplicates
     ball_shots_frames_final = set()
 
-    # Add initial hit
-    ball_shots_frames_final.add(ball_shots_frames_audio[0])
-
-
-
-    ## GET AUDIO FRAME
-
-    # We now iterate through the found direction changes and see if we can find
-    # a close frame hit also in the audio ; audio gives us the best approximation of 
-    # correct frame 
-    for i in ball_shots_frames:
-        for j in ball_shots_frames_audio:
-            if i - fps < j < i + fps: # maybe less than fps
-                ball_shots_frames_final.add(j)
-
+    # Add all audio hits (since these are very consistent)
+    for i in ball_shots_frames_audio:
+        ball_shots_frames_final.add(i)
 
 
     ## GAP CHECKING 
 
-    # Next, we need to take into account that there will be more silent hits that our audio model might not recognize, but are recognized by the change of direction model
-    # Therefore, we check if we have large gaps in the audio results where we have some results of the change of direction model
+    # Next, we need to take into account that there will be more silent hits that our audio model might not recognize, 
+    # Therefore, we check if we have large gaps in the audio results and then refine the audio detection by detecting
+    # lower peaks in the audio signal
 
-    # Iterate through the audio frame in 2 (checking always pairs)
-    # As a rough base, a hit should occur every 1.5 seconds (roughly), when players play from the very back;
-    # So if our audio model fails, there would be around 3 seconds silence (no hit) ; but our visual model should
-    # detect these! Therefore, we say if there was no hit recognized in the audio model in 2 seconds, we
-    # check in the visual model and take the hits recognized there
 
-    thresh = fps * 2 # 2 seconds
+    thresh = fps * 1.5 # 1.5 seconds
 
-    
     for idx in range(0, len(ball_shots_frames_audio) - 1, 1):
-        if ball_shots_frames_audio[idx + 1 ] - ball_shots_frames_audio[idx] > thresh:
-            # Find the range in ball_shots_frames
-            for i in ball_shots_frames:
-                if i in [x for x in range(ball_shots_frames_audio[idx], ball_shots_frames_audio[idx +1])]:
-                    ball_shots_frames_final.add(i)
+        if ball_shots_frames_audio[idx + 1] - ball_shots_frames_audio[idx] > thresh:
+            
+            peak_heights = [0.19,0.18,0.17,0.16,0.15,0.14,0.13,0.12,0.11,0.10,0.009,0.008]
+
+            for peak_height in peak_heights:
+                refined_hits = get_ball_shot_frames_audio_refinement(audio_file, fps, frames_start= ball_shots_frames_audio[idx], 
+                                                                      frames_end = ball_shots_frames_audio[idx + 1], peak_height = peak_height)
+            
+                if refined_hits:
+                    for i in refined_hits:
+                        # Too close (i.e. still from old racket hit signal)
+                        if (ball_shots_frames_audio[idx]  <= i <= ball_shots_frames_audio[idx] + fps//10) or (ball_shots_frames_audio[idx + 1] - fps//10  <= i <= ball_shots_frames_audio[idx + 1]):
+                            pass
+                        else:
+                            ball_shots_frames_final.add(i)
+                    break 
+            
 
                    
 

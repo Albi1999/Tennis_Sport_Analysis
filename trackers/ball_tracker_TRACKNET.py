@@ -1,85 +1,83 @@
-# Implementation from : https://github.com/yastrebksv/TrackNet/blob/main/model.py
-
 import torch.nn as nn
 import torch
 
+
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, pad=1, stride=1, bias=True):
+    def __init__(self, in_channels, out_channels, kernel_size, pad, bias=True, bn=True):
         super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=pad, bias=bias),
-            nn.ReLU(),
-            nn.BatchNorm2d(out_channels)
-        )
+        if bn:
+            self.block = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size, padding=pad, bias=bias),
+                nn.ReLU(),
+                nn.BatchNorm2d(out_channels)
+            )
+        else:
+            self.block = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size, padding=pad, bias=bias),
+                nn.ReLU()
+            )
 
     def forward(self, x):
         return self.block(x)
 
-class BallTrackerNet(nn.Module):
-    def __init__(self, out_channels=256):
+
+
+class BallTrackerNetTRACE(nn.Module):
+    """
+    Deep network for ball detection
+    """
+    def __init__(self, out_channels=256, bn=True):
         super().__init__()
         self.out_channels = out_channels
 
-        self.conv1 = ConvBlock(in_channels=9, out_channels=64)
-        self.conv2 = ConvBlock(in_channels=64, out_channels=64)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv3 = ConvBlock(in_channels=64, out_channels=128)
-        self.conv4 = ConvBlock(in_channels=128, out_channels=128)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv5 = ConvBlock(in_channels=128, out_channels=256)
-        self.conv6 = ConvBlock(in_channels=256, out_channels=256)
-        self.conv7 = ConvBlock(in_channels=256, out_channels=256)
-        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv8 = ConvBlock(in_channels=256, out_channels=512)
-        self.conv9 = ConvBlock(in_channels=512, out_channels=512)
-        self.conv10 = ConvBlock(in_channels=512, out_channels=512)
-        self.ups1 = nn.Upsample(scale_factor=2)
-        self.conv11 = ConvBlock(in_channels=512, out_channels=256)
-        self.conv12 = ConvBlock(in_channels=256, out_channels=256)
-        self.conv13 = ConvBlock(in_channels=256, out_channels=256)
-        self.ups2 = nn.Upsample(scale_factor=2)
-        self.conv14 = ConvBlock(in_channels=256, out_channels=128)
-        self.conv15 = ConvBlock(in_channels=128, out_channels=128)
-        self.ups3 = nn.Upsample(scale_factor=2)
-        self.conv16 = ConvBlock(in_channels=128, out_channels=64)
-        self.conv17 = ConvBlock(in_channels=64, out_channels=64)
-        self.conv18 = ConvBlock(in_channels=64, out_channels=self.out_channels)
+        # Encoder layers
+        layer_1 = ConvBlock(in_channels=9, out_channels=64, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_2 = ConvBlock(in_channels=64, out_channels=64, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        layer_4 = ConvBlock(in_channels=64, out_channels=128, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_5 = ConvBlock(in_channels=128, out_channels=128, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_6 = nn.MaxPool2d(kernel_size=2, stride=2)
+        layer_7 = ConvBlock(in_channels=128, out_channels=256, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_8 = ConvBlock(in_channels=256, out_channels=256, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_9 = ConvBlock(in_channels=256, out_channels=256, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_10 = nn.MaxPool2d(kernel_size=2, stride=2)
+        layer_11 = ConvBlock(in_channels=256, out_channels=512, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_12 = ConvBlock(in_channels=512, out_channels=512, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_13 = ConvBlock(in_channels=512, out_channels=512, kernel_size=3, pad=1, bias=True, bn=bn)
+
+        self.encoder = nn.Sequential(layer_1, layer_2, layer_3, layer_4, layer_5, layer_6, layer_7, layer_8, layer_9,
+                                     layer_10, layer_11, layer_12, layer_13)
+
+        # Decoder layers
+        layer_14 = nn.Upsample(scale_factor=2)
+        layer_15 = ConvBlock(in_channels=512, out_channels=256, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_16 = ConvBlock(in_channels=256, out_channels=256, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_17 = ConvBlock(in_channels=256, out_channels=256, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_18 = nn.Upsample(scale_factor=2)
+        layer_19 = ConvBlock(in_channels=256, out_channels=128, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_20 = ConvBlock(in_channels=128, out_channels=128, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_21 = nn.Upsample(scale_factor=2)
+        layer_22 = ConvBlock(in_channels=128, out_channels=64, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_23 = ConvBlock(in_channels=64, out_channels=64, kernel_size=3, pad=1, bias=True, bn=bn)
+        layer_24 = ConvBlock(in_channels=64, out_channels=self.out_channels, kernel_size=3, pad=1, bias=True, bn=bn)
+
+        self.decoder = nn.Sequential(layer_14, layer_15, layer_16, layer_17, layer_18, layer_19, layer_20, layer_21,
+                                     layer_22, layer_23, layer_24)
 
         self.softmax = nn.Softmax(dim=1)
         self._init_weights()
-                  
-    def forward(self, x, testing=False): 
+
+
+    def forward(self, x, testing=False):
         batch_size = x.size(0)
-        x = self.conv1(x)
-        x = self.conv2(x)    
-        x = self.pool1(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.pool2(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
-        x = self.conv7(x)
-        x = self.pool3(x)
-        x = self.conv8(x)
-        x = self.conv9(x)
-        x = self.conv10(x)
-        x = self.ups1(x)
-        x = self.conv11(x)
-        x = self.conv12(x)
-        x = self.conv13(x)
-        x = self.ups2(x)
-        x = self.conv14(x)
-        x = self.conv15(x)
-        x = self.ups3(x)
-        x = self.conv16(x)
-        x = self.conv17(x)
-        x = self.conv18(x)
-        # x = self.softmax(x)
-        out = x.reshape(batch_size, self.out_channels, -1)
+        features = self.encoder(x)
+        scores_map = self.decoder(features)
+        output = scores_map.reshape(batch_size, self.out_channels, -1)
+        # output = output.permute(0, 2, 1)
         if testing:
-            out = self.softmax(out)
-        return out                       
-    
+            output = self.softmax(output)
+        return output
+
     def _init_weights(self):
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
@@ -89,5 +87,6 @@ class BallTrackerNet(nn.Module):
 
             elif isinstance(module, nn.BatchNorm2d):
                 nn.init.constant_(module.weight, 1)
-                nn.init.constant_(module.bias, 0)    
-    
+                nn.init.constant_(module.bias, 0)
+
+
