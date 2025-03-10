@@ -82,8 +82,10 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
             continue 
         # no bounce 
         else:
-            f = os.path.join(output_path_no_bounce, f"{video_n}_frame_{idx}.jpg")
-            cv2.imwrite(f, frame)
+            # Only add examples after first initial racket hit (bc start is often messy)
+            if idx > ball_shots_frames_original[0]:
+                f = os.path.join(output_path_no_bounce, f"{video_n}_frame_{idx}.jpg")
+                cv2.imwrite(f, frame)
 
 
 

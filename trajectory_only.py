@@ -158,9 +158,32 @@ def main():
     # video 105 : racket hit at 186 (missed by model)
     # video 107 : remove the last (269, because of voice of commentator seen as a peak), and also remove 203 
 
-     # CHANGE HERE PATH
-    # TODO : in scraping, remove anything before the first initial hit (because here ball tracker messy) ; dont use these as examples for training
- #   scraping_data(video_n = 101, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_ground_hits_v_101, ball_shots_frames = ball_shots_frames, trace = trace)
+    # Look into output/trajectory_model_videos and look at the _frames videos : here we can see the frame the ball hits the ground
+    # If the ball is too occluded : look into the output/trajectory_model_videos folder and there the normal output videos :
+    # see if the trajectory ("V" shape) is still visible ; else add "None"
+    if video_number == 100:
+        ball_bounce_frames = [49, 75, 106, 142]
+    if video_number == 101:
+        ball_bounce_frames = [20,50,76,106,138,169,197,230,270,301]
+    if video_number == 102:
+        ball_bounce_frames = [13,41,73,104,131,159,190,221,270,299,329,363,414]
+    if video_number == 103:
+        ball_bounce_frames = [23,66,97]
+    if video_number == 105:
+        ball_bounce_frames = [48,None,115,146,208,268]
+        ball_shots_frames.append(186)
+        ball_shots_frames = sorted(ball_shots_frames)
+    if video_number == 107:
+        ball_bounce_frames = [69,107,133,172,202,279]
+        ball_shots_frames.remove(269)
+        ball_shots_frames.remove(203)
+        ball_shots_frames = sorted(ball_shots_frames)
+
+
+     
+
+    # CHANGE HERE PATH
+   # scraping_data(video_n = 101, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace)
 
     # change accordingly if on line or on circles
   #  train,val,test = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
