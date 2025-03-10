@@ -35,7 +35,7 @@ import os
 
 def main():
 
-    video_number = 107
+    video_number = 109
 
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -157,6 +157,8 @@ def main():
 
     # video 105 : racket hit at 186 (missed by model)
     # video 107 : remove the last (269, because of voice of commentator seen as a peak), and also remove 203 
+    # video 108 : Shot at 42 is the racket hitting the ground, the real shot was at 37 - last shot was at 91 instead of 89
+    # video 109 : at 47 there is no shot, shot at 61 is at 65, 116 is at 124, 148 is at 153, 171 is at 177, missed shot at 211 
 
     # Look into output/trajectory_model_videos and look at the _frames videos : here we can see the frame the ball hits the ground
     # If the ball is too occluded : look into the output/trajectory_model_videos folder and there the normal output videos :
@@ -177,6 +179,24 @@ def main():
         ball_bounce_frames = [69,107,133,172,202,279]
         ball_shots_frames.remove(269)
         ball_shots_frames.remove(203)
+        ball_shots_frames = sorted(ball_shots_frames)
+    if video_number == 108:
+        ball_bounce_frames = [29, 78, 104]
+        ball_shots_frames.append(37)
+        ball_shots_frames.remove(42)
+        ball_shots_frames = sorted(ball_shots_frames)
+    if video_number == 109:
+        ball_bounce_frames = [30, 55, 86, 111, 144, 169, 203, 244]
+        ball_shots_frames.remove(47)
+        ball_shots_frames.remove(61)
+        ball_shots_frames.append(65)
+        ball_shots_frames.remove(116)
+        ball_shots_frames.append(124)
+        ball_shots_frames.remove(148)
+        ball_shots_frames.append(153)
+        ball_shots_frames.remove(171)
+        ball_shots_frames.append(177)
+        ball_shots_frames.append(211)
         ball_shots_frames = sorted(ball_shots_frames)
 
 

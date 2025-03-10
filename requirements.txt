@@ -14,3 +14,4 @@ torchvision
 plotly
 scikit-image
 filterpy
+yt-dlp

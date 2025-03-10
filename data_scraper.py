@@ -41,9 +41,9 @@ def download_clip(url, start, end):
 
 
 def main():
-    url = 'https://www.youtube.com/watch?v=najrNDwxUrI&ab_channel=Roland-Garros'
-    start = '00:28:35'
-    end = '00:28:45'
+    url = 'https://www.youtube.com/watch?v=ATI9B7ZLof8&t=6127s&ab_channel=AustralianOpenTV'
+    start = '02:27:54'
+    end = '02:28:05'
     download_clip(url, start, end)
 
 if __name__ == '__main__':
