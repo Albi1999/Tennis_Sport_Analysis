@@ -96,9 +96,10 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
     model = model.to(device)
     
     # Define loss and optimizer
+  #  criterion = nn.BCEWithLogitsLoss()
     criterion = nn.BCELoss() # TODO : ADD WEIGHTING FOR CLASS IMBALANCE (if we still have it)
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
+  #  scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
     
     best_val_loss = float('inf')
     
@@ -112,9 +113,9 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             
-            optimizer.zero_grad()
             outputs = model(inputs).squeeze()
             loss = criterion(outputs, labels)
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             
@@ -132,7 +133,7 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
         correct = 0
         total = 0
         
-        with torch.no_grad():
+        with torch.inference_mode():
             for inputs, labels in val_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs).squeeze()
@@ -147,7 +148,7 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
         val_acc = correct / total
         
         # Update learning rate
-        scheduler.step(val_loss)
+    #    scheduler.step(val_loss)
         
         print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}')
         

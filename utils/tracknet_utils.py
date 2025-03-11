@@ -343,7 +343,7 @@ def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     # Lower height threshold to catch more peaks
     peaks, _ = find_peaks(y_envelope, 
                         height=0.02,  # Lower threshold to catch more peaks
-                        distance=int(0.5 * sr),  # Minimum distance between peaks
+                        distance=int(0.5 * sr),  # Minimum distance between peaks 
                         prominence=0.01)  # Find all distinct peaks 
     
     # Convert peak positions to time (seconds)

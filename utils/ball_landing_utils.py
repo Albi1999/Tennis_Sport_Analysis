@@ -66,6 +66,8 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
         if idx in ball_bounce_frames:
             # These frames have the more characteristic "V" shape that we are looking for
             bounce_frames_curr = [idx+i for i in range(trace - 1)]
+            # Make sure not to go over bounds 
+            bounce_frames_curr = list(filter(lambda x : x <= len(input_frames) - 1, bounce_frames_curr))
             for i in bounce_frames_curr:
                 # If already is a racket hit, break
                 if i in ball_shots_frames_original:
