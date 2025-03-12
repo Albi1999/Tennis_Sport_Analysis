@@ -6,6 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import cv2 
 import os 
+import numpy as np
 
 
 class BounceCNN(nn.Module):
@@ -67,7 +68,7 @@ class BounceCNN(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         
-        return torch.sigmoid(x)  # Sigmoid for binary classification
+        return x
 
 
 
@@ -91,17 +92,20 @@ class BounceDataset(Dataset):
         return image, label
 
     
-def train_model(model, train_loader, val_loader, num_epochs=20):
+def train_model(model, train_loader, val_loader, num_epochs=20, patience=7):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
     # Define loss and optimizer
   #  criterion = nn.BCEWithLogitsLoss()
-    criterion = nn.BCELoss() # TODO : ADD WEIGHTING FOR CLASS IMBALANCE (if we still have it)
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
-  #  scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.2]))
+  #  criterion = nn.BCELoss() # TODO : ADD WEIGHTING FOR CLASS IMBALANCE (if we still have it)
+  #  optimizer = optim.Adam(model.parameters(), lr=0.01)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-6)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
     
     best_val_loss = float('inf')
+    early_stopping_counter = 0  # For early stopping
     
     for epoch in range(num_epochs):
         # Training phase
@@ -148,28 +152,42 @@ def train_model(model, train_loader, val_loader, num_epochs=20):
         val_acc = correct / total
         
         # Update learning rate
-    #    scheduler.step(val_loss)
-        
+        scheduler.step(val_loss)  # Reduce LR when validation loss stagnates
         print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}')
-        
-        # Save best model
+
+        # Early Stopping
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), 'models/best_bounce_model.pth')
+            torch.save(model.state_dict(), 'models/best_bounce_model.pth')  # Save best model
+            early_stopping_counter = 0  # Reset counter
+        else:
+            early_stopping_counter += 1
+        
+        if early_stopping_counter >= patience:
+            print(f"Early stopping triggered after {epoch+1} epochs!")
+            break  # Stop training if no improvement
     
     return model
 
+def compute_mean_std(dataset):
+    loader = DataLoader(dataset, batch_size=32, shuffle=False)
+    mean = torch.zeros(3)  # For RGB channels
+    std = torch.zeros(3)
+    total_samples = 0
+
+    for images, _ in loader:
+        batch_samples = images.size(0)  # Get batch size
+        images = images.view(batch_samples, images.size(1), -1)  # Flatten spatial dimensions
+        mean += images.mean([0, 2])  # Compute mean per channel
+        std += images.std([0, 2])  # Compute std per channel
+        total_samples += batch_samples
+
+    mean /= total_samples
+    std /= total_samples
+    return mean, std
 
 
 if __name__ == "__main__":
-    # Define transformations
-    transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize((224, 224)), # TODO : do we want to resize or do we lose too much information ? check !
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) #TODO : Replace with mean/std of our data (? how to find that)
-    ])
-
 
     bounce_circles_train_dir = 'data/trajectory_model_dataset/circles/train/bounce'
     no_bounce_circles_train_dir = 'data/trajectory_model_dataset/circles/train/no_bounce'
@@ -212,6 +230,36 @@ if __name__ == "__main__":
     image_paths_test = bounce_test + no_bounce_test
     labels_test = [1 for x in range(len(bounce_test))] + [0 for x in range(len(no_bounce_test))]
     
+    # Define transformations
+    # Define transformations (WITHOUT Normalization)
+    transform_no_norm = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((128, 128)),  # Resize to fixed input size
+        transforms.ToTensor(),  # Convert to tensor
+    ])
+
+    # Create Dataset Object without Normalization
+    train_dataset_no_norm = BounceDataset(
+        image_paths=image_paths_train,
+        labels=labels_train,
+        transform=transform_no_norm  # No normalization applied here
+    )
+
+    # Compute Mean & Std
+    mean, std = compute_mean_std(train_dataset_no_norm)
+    print(f"Dataset Mean: {mean}, Std: {std}")
+
+    # Define transformations with Correct Mean & Std
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((128, 128)),  
+        transforms.RandomHorizontalFlip(p=0.5),  
+        transforms.RandomRotation(10),  
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  
+        transforms.ToTensor(),  
+        transforms.Normalize(mean=mean.tolist(), std=std.tolist())  # Apply computed values
+    ])
+
     # Create datasets
     train_dataset = BounceDataset(
         image_paths= image_paths_train,
@@ -226,9 +274,9 @@ if __name__ == "__main__":
     )
     
     # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32)
-    
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=64)
+
     # Initialize and train model
     model = BounceCNN()
     trained_model = train_model(model, train_loader, val_loader)
