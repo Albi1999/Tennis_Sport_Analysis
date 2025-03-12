@@ -7,6 +7,10 @@ from torchvision import transforms
 import cv2 
 import os 
 import numpy as np
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 
 class BounceCNN(nn.Module):
@@ -93,12 +97,14 @@ class BounceDataset(Dataset):
 
     
 def train_model(model, train_loader, val_loader, num_epochs=20, patience=7):
+    print("Training Model...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
     # Define loss and optimizer
+    pos_weight = torch.tensor([2.0]).to(device)  # Weighted loss for class imbalance
   #  criterion = nn.BCEWithLogitsLoss()
-    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.2]))
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
   #  criterion = nn.BCELoss() # TODO : ADD WEIGHTING FOR CLASS IMBALANCE (if we still have it)
   #  optimizer = optim.Adam(model.parameters(), lr=0.01)
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-6)
@@ -186,8 +192,73 @@ def compute_mean_std(dataset):
     std /= total_samples
     return mean, std
 
+def evaluate_model(model, test_loader):
+    print("Evaluating Model...")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model.eval()
+    
+    all_predictions = []
+    all_labels = []
+    
+    with torch.inference_mode():
+        for inputs, labels in test_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs).squeeze()
+            predicted = (outputs > 0.5).float()
+            
+            all_predictions.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+    
+    # Convert lists to numpy arrays
+    all_predictions = np.array(all_predictions)
+    all_labels = np.array(all_labels)
+    
+    # Calculate metrics
+    accuracy = accuracy_score(all_labels, all_predictions)
+    precision = precision_score(all_labels, all_predictions)
+    recall = recall_score(all_labels, all_predictions)
+    f1 = f1_score(all_labels, all_predictions)
+    f1_beta = fbeta_score(all_labels, all_predictions, beta=2) # F2 score to give more weight to recall
+    
+    print(f"Test Metrics:")
+    print(f"Accuracy: {accuracy:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
+    print(f"F2 Score (Recall-oriented): {f1_beta:.4f}")
+    
+    # Create and plot confusion matrix
+    cm = confusion_matrix(all_labels, all_predictions)
+
+    
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=['No Bounce', 'Bounce'],
+                yticklabels=['No Bounce', 'Bounce'])
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
+    plt.tight_layout()
+    
+    # Save the plot
+    os.makedirs('results', exist_ok=True)
+    plt.savefig('results/confusion_matrix.png')
+    plt.show()
+    
+    return {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1,
+        'f1_beta': f1_beta,
+        'confusion_matrix': cm
+    }
+
 
 if __name__ == "__main__":
+    
+    print("Loading Data...")
 
     bounce_circles_train_dir = 'data/trajectory_model_dataset/circles/train/bounce'
     no_bounce_circles_train_dir = 'data/trajectory_model_dataset/circles/train/no_bounce'
@@ -273,10 +344,24 @@ if __name__ == "__main__":
         transform=transform
     )
     
+    test_dataset = BounceDataset(
+        image_paths=image_paths_test,
+        labels=labels_test,
+        transform=transform
+    )
+    
     # Create data loaders
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=64)
+    test_loader = DataLoader(test_dataset, batch_size=64)
 
     # Initialize and train model
     model = BounceCNN()
-    trained_model = train_model(model, train_loader, val_loader)
+    trained_model = train_model(model, train_loader, val_loader) # Comment this line if you want to skip training
+    
+    # Load best model
+    model.load_state_dict(torch.load('models/best_bounce_model.pth'))
+    metrics = evaluate_model(model, test_loader)
+    
+
+    
