@@ -225,7 +225,7 @@ def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'c
         # Draw circles for all valid points
         if draw_mode == 'circle':
             for point in valid_points:
-                frame = cv2.circle(frame, point, radius=0, color=(0, 0, 255), thickness=4)
+                frame = cv2.circle(frame, point, radius=2, color=(0, 0, 255), thickness=10)
         
         elif draw_mode == 'line':
             # Draw lines between consecutive points
