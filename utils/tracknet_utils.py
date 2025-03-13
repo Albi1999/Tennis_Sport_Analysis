@@ -261,7 +261,7 @@ def detect_frames_TRACKNET(video_frames, video_number, tracker, video_width, vid
 
 
     # Final removal of outliers based on distances after initial interpolation method
-    ball_detections = remove_outliers_final(ball_detections, thresh= 300)
+  #  ball_detections = remove_outliers_final(ball_detections, thresh= 300)
     
 
     # Copy TrackNet ball_detections

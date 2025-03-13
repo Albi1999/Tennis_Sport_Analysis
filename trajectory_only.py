@@ -169,7 +169,8 @@ def main():
         if video_number == 100:
             ball_bounce_frames = [49, 75, 106, 142]
         if video_number == 101:
-            ball_bounce_frames = [20,50,76,106,138,169,197,230,270,301]
+            # removed 169 because trace is just a single point ; bad for training
+            ball_bounce_frames = [20,50,76,106,138,197,230,273,301]
         if video_number == 102:
             ball_bounce_frames = [13,41,73,104,131,159,190,221,270,299,329,363,414]
         if video_number == 103:
@@ -177,17 +178,17 @@ def main():
         if video_number == 105:
             ball_bounce_frames = [48,None,115,146,208,268]
             ball_shots_frames.append(186)
-            ball_shots_frames = sorted(ball_shots_frames)
+
         if video_number == 107:
             ball_bounce_frames = [69,107,133,172,202,279]
             ball_shots_frames.remove(269)
             ball_shots_frames.remove(203)
-            ball_shots_frames = sorted(ball_shots_frames)
+
         if video_number == 108:
             ball_bounce_frames = [29, 78, 104]
             ball_shots_frames.append(37)
             ball_shots_frames.remove(42)
-            ball_shots_frames = sorted(ball_shots_frames)
+
         if video_number == 109:
             ball_bounce_frames = [30, 55, 86, 111, 144, 169, 203, 244]
             ball_shots_frames.remove(47)
@@ -200,16 +201,18 @@ def main():
             ball_shots_frames.remove(171)
             ball_shots_frames.append(177)
             ball_shots_frames.append(211)
-            ball_shots_frames = sorted(ball_shots_frames)
+
+
+        ball_shots_frames = sorted(ball_shots_frames)
 
 
         
 
         # CHANGE HERE PATH
-        scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace)
+        scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
 
         # change accordingly if on line or on circles
-        _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+    #    _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
     
 
 

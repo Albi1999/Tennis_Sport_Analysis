@@ -35,7 +35,7 @@ def create_black_video(output_path, width, height, fps, frame_count):
 
 
 
-def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_shots_frames, trace):
+def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_shots_frames, trace, ball_detections):
 
     """
     Scrape the training data 
@@ -62,16 +62,46 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
     ball_bounce_frames = set(ball_bounce_frames)
     ball_shots_frames = set(ball_shots_frames)
     bounce_frames_curr = []
+    bounce_frames_continuation = []
     for idx,frame in enumerate(input_frames):
-        if idx in ball_bounce_frames:
+        # Exclude the initial ball bounce, as it comes from a serve and the ball tracking there is not optimal
+        if idx in ball_bounce_frames and idx > ball_shots_frames_original[1]:
             # These frames have the more characteristic "V" shape that we are looking for
-            bounce_frames_curr = [idx+i for i in range(trace - 1)]
+            # Start one frame after the initial bounce (such that a V pattern is more clearly visible)
+            # Follow for around 6 frames (this could be done more analytically with the velocity of the
+            # ball to understand how much of a v-shape is visible, but for our use case this is enough)
+            
+            
+            bounce_frames_curr = [idx+2+i for i in range(6)]
+
+
+            #### No Bounce Helper
+            # Find the next racket hit after a bounce 
+            for i in ball_shots_frames_original:
+                if i > idx:
+                    curr_racket_hit = i 
+                    break 
+                else:
+                    curr_racket_hit = None 
+
+
+            # This list we create just such that in the "no bounce" examples we don't accidentally include bounce "residues"
+            if curr_racket_hit:
+                bounce_frames_continuation = [i for i in range(idx, curr_racket_hit)]
+            else:
+                bounce_frames_continuation = [i for i in range(idx, len(input_frames))]
+            #### No Bounce Helper
+
             # Make sure not to go over bounds 
             bounce_frames_curr = list(filter(lambda x : x <= len(input_frames) - 1, bounce_frames_curr))
             for i in bounce_frames_curr:
                 # If already is a racket hit, break
                 if i in ball_shots_frames_original:
                     break
+                # Furthermore, check that there are atleast 4 consecutive tracks (else we add empty image / too little trace)
+                elif any(ball_detect[0] is None for ball_detect in ball_detections[i:i+4]):
+                    continue
+
                 f = os.path.join(output_path_bounce, f"{video_n}_frame_{i}.jpg")
                 cv2.imwrite(f, input_frames[i])
                 # DATA AUGMENTATION : FLIP VERTICALLY (since we have about 2:1 no bounce to bounce ratio)
@@ -79,13 +109,13 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
                 cv2.imwrite(f, cv2.flip(input_frames[i],1))
 
 
-        # TODO : maybe even extend bounce_frames_curr by like 2 frames before, because that is where the ball already falls into the more v shape thing
-        if idx in bounce_frames_curr or idx in ball_shots_frames:
+        
+        elif idx in bounce_frames_continuation or idx in ball_shots_frames:
             continue 
         # no bounce 
         else:
-            # Only add examples after first initial racket hit (bc start is often messy)
-            if idx > ball_shots_frames_original[0]:
+            # Only add examples after second racket hit (bc start is often messy)
+            if idx > ball_shots_frames_original[1]:
                 f = os.path.join(output_path_no_bounce, f"{video_n}_frame_{idx}.jpg")
                 cv2.imwrite(f, frame)
 
