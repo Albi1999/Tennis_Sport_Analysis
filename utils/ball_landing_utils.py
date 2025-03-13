@@ -34,6 +34,63 @@ def create_black_video(output_path, width, height, fps, frame_count):
     out.release()
 
 
+def scraping_data_for_inference(video_n, output_path, input_frames, ball_shots_frames, trace , ball_detections):
+
+    output_path_inference = output_path + '/images_inference'
+
+
+    # Delete the folder if it exists
+    if os.path.exists(output_path_inference):
+        # Remove all files in the directory
+        for file in os.listdir(output_path_inference):
+            file_path = os.path.join(output_path_inference, file)
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+
+
+    if not os.path.exists(output_path_inference):
+        os.makedirs(output_path_inference)
+
+
+    # Extend ball_shots_frames 
+    ball_shots_frames_original = deepcopy(ball_shots_frames)
+    # First, extend the ball_shots_frames 
+    for i in ball_shots_frames_original:
+        for j in range(i, i + trace//2):
+            ball_shots_frames.append(j)
+
+    ball_shots_frames = set(ball_shots_frames)
+
+    saved_frames = []
+    for idx,frame in enumerate(input_frames):
+        # We don't look at the initial hit
+        if idx > ball_shots_frames_original[1]:
+    
+            # If it is a racket hit (or directly after a racket hit)
+            if idx in ball_shots_frames:
+                continue
+            # Furthermore, check that there are atleast 4 consecutive tracks (else we add empty image / too little trace)
+            elif any(ball_detect[0] is None for ball_detect in ball_detections[idx:idx+4]):
+                continue
+
+            # Else, we run inference on the image
+            f = os.path.join(output_path_inference, f"{video_n}_frame_{idx}.jpg")
+            cv2.imwrite(f, input_frames[idx])
+            saved_frames.append(idx)
+
+
+    return saved_frames
+
+
+
+
+
+
+
+
+
+    
+
 
 def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_shots_frames, trace, ball_detections):
 

@@ -35,7 +35,7 @@ import os
 
 def main():
 
-    video_numbers = [100,101,102,103,105,107,108,109]
+    video_numbers = [100]
 
     for video_number in video_numbers:
    # video_number = 100
@@ -147,12 +147,6 @@ def main():
         for i, frame in enumerate(video_frames_real):
             cv2.putText(frame, f"Frame n {i}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255,0,0), 3)
 
-        # Scrape data
-        # Please make a list for EACH video, in case we have to rerun for some reason (that we then dont have to )
-
-
-
-
 
         output_path_circle = 'data/trajectory_model_dataset/circles'
         output_path_line = 'data/trajectory_model_dataset/lines'
@@ -212,13 +206,16 @@ def main():
         scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
 
         # change accordingly if on line or on circles
-        _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+   #     _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
     
 
 
         # Save video
-        save_video(output_frames, output_video_path, fps)
-        save_video(video_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
+    #    save_video(output_frames, output_video_path, fps)
+    #    save_video(video_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
+
+
+
 
 
 

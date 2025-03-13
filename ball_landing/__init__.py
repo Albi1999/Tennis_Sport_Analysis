@@ -1,1 +1,2 @@
 from .ball_landing_detection_physics import BallLandingDetector
+from .ball_landing_detection_ml import *

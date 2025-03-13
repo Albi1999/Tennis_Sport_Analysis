@@ -10,6 +10,9 @@ import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
+import sys 
+import pickle 
+sys.path.append('../')
 
 
 
@@ -18,7 +21,7 @@ class BounceCNN(nn.Module):
         super(BounceCNN, self).__init__()
 
 
-        # TODO :maybe avg pooling due to finding patterns ? 
+        
         # 1st block
         self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(32)
@@ -40,8 +43,8 @@ class BounceCNN(nn.Module):
         self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
         
 
-        # TODO : do we go for fixed input sizes ?
-        # Adaptive pooling to ensure fixed size regardless of input dimensions
+       
+        # Adaptive pooling to ensure fixed size regardless of input dimensions # TODO : take out, since we resize anyway
         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
         
         # FCNN
@@ -130,7 +133,7 @@ def train_model(model, train_loader, val_loader, num_epochs=20, patience=7):
             optimizer.step()
             
             train_loss += loss.item()
-            predicted = (outputs > 0.5).float() 
+            predicted = (torch.sigmoid(outputs) > 0.5).float() 
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
         
@@ -150,7 +153,7 @@ def train_model(model, train_loader, val_loader, num_epochs=20, patience=7):
                 loss = criterion(outputs, labels)
                 
                 val_loss += loss.item()
-                predicted = (outputs > 0.5).float()
+                predicted = (torch.sigmoid(outputs) > 0.5).float()
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
         
@@ -205,7 +208,7 @@ def evaluate_model(model, test_loader):
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs).squeeze()
-            predicted = (outputs > 0.5).float()
+            predicted = (torch.sigmoid(outputs) > 0.5).float()
             
             all_predictions.extend(predicted.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
@@ -255,7 +258,57 @@ def evaluate_model(model, test_loader):
         'confusion_matrix': cm
     }
 
+def make_prediction(model, best_model_path, input_frames_directory, transform, device):
+    """Uses BounceDataset for consistent processing"""
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
+    model.to(device)
+    model.eval()
+    
+    # Get sorted list of image paths
+    directory_files = sorted(os.listdir(input_frames_directory))
+    img_paths = [os.path.join(input_frames_directory, file) for file in directory_files]
+    
+    # Create dummy labels
+    dummy_labels = [0] * len(img_paths)
+    
+    # Use your existing dataset class
+    dataset = BounceDataset(image_paths=img_paths, labels=dummy_labels, transform=transform)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+    
+    predictions = []
+    confidences = []
+    
+    with torch.inference_mode():
+        for inputs, _ in dataloader:
+            inputs = inputs.to(device)
+            outputs = model(inputs).squeeze()
+            
+            confidence = torch.sigmoid(outputs).item()
+            predicted_label = 1 if confidence > 0.5 else 0
+            
+            predictions.append(predicted_label)
+            confidences.append(confidence)
+    
+    return predictions, confidences
 
+
+# TODO : need it in the final .py file (main.py) , so we have to down below clean up the code a bit (put into a utils file the transformations, mean calculation etc.)
+def evaluation_transform(mean, std):
+
+    eval_transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((128, 128)),  
+        transforms.ToTensor(),  
+        transforms.Normalize(mean=mean.tolist(), std=std.tolist())
+    ])
+
+    return eval_transform
+
+
+
+
+
+        
 if __name__ == "__main__":
     
     print("Loading Data...")
@@ -316,9 +369,16 @@ if __name__ == "__main__":
         transform=transform_no_norm  # No normalization applied here
     )
 
-    # Compute Mean & Std
+    # Compute Mean & Std (on the training dataset)
     mean, std = compute_mean_std(train_dataset_no_norm)
     print(f"Dataset Mean: {mean}, Std: {std}")
+
+    data_mean_std = [mean, std]
+
+    with open('data_bounce_stubs/data_mean_std.pkl', 'wb') as f:
+            pickle.dump(data_mean_std, f)
+
+
 
     # Define transformations with Correct Mean & Std
     transform = transforms.Compose([
@@ -331,6 +391,14 @@ if __name__ == "__main__":
         transforms.Normalize(mean=mean.tolist(), std=std.tolist())  # Apply computed values
     ])
 
+
+    eval_transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((128, 128)),  
+        transforms.ToTensor(),  
+        transforms.Normalize(mean=mean.tolist(), std=std.tolist())
+    ])
+
     # Create datasets
     train_dataset = BounceDataset(
         image_paths= image_paths_train,
@@ -341,13 +409,13 @@ if __name__ == "__main__":
     val_dataset = BounceDataset(
         image_paths=image_paths_val,
         labels=labels_val,
-        transform=transform
+        transform=eval_transform
     )
     
     test_dataset = BounceDataset(
         image_paths=image_paths_test,
         labels=labels_test,
-        transform=transform
+        transform=eval_transform
     )
     
     # Create data loaders
@@ -357,7 +425,7 @@ if __name__ == "__main__":
 
     # Initialize and train model
     model = BounceCNN()
-    trained_model = train_model(model, train_loader, val_loader) # Comment this line if you want to skip training
+ #   trained_model = train_model(model, train_loader, val_loader, num_epochs = 50) # Comment this line if you want to skip training
     
     # Load best model
     model.load_state_dict(torch.load('models/best_bounce_model.pth'))
