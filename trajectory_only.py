@@ -212,7 +212,7 @@ def main():
         scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
 
         # change accordingly if on line or on circles
-    #    _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+        _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
     
 
 
