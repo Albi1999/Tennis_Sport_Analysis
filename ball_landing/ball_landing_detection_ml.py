@@ -263,10 +263,26 @@ def make_prediction(model, best_model_path, input_frames_directory, transform, d
     model.load_state_dict(torch.load(best_model_path, map_location=device))
     model.to(device)
     model.eval()
+
+    import re
+
+
+
     
     # Get sorted list of image paths
     directory_files = sorted(os.listdir(input_frames_directory))
     img_paths = [os.path.join(input_frames_directory, file) for file in directory_files]
+    img_idxs = []
+    # Pattern to extract the number before .jpg
+    pattern = r'(\d+)\.jpg$'
+
+    for i in img_paths:
+        # Search for the pattern in the filename
+        match = re.search(pattern, str(i))
+
+        if match:
+            number = match.group(1)
+            img_idxs.append(number)
     
     # Create dummy labels
     dummy_labels = [0] * len(img_paths)
@@ -289,7 +305,7 @@ def make_prediction(model, best_model_path, input_frames_directory, transform, d
             predictions.append(predicted_label)
             confidences.append(confidence)
     
-    return predictions, confidences
+    return predictions, confidences, img_idxs
 
 
 # TODO : need it in the final .py file (main.py) , so we have to down below clean up the code a bit (put into a utils file the transformations, mean calculation etc.)

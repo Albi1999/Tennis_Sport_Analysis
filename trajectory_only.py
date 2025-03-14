@@ -148,7 +148,7 @@ def main():
             cv2.putText(frame, f"Frame n {i}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255,0,0), 3)
 
 
-        output_path_circle = 'data/trajectory_model_dataset/circles'
+        output_path_circle = 'data_test'
         #output_path_line = 'data/trajectory_model_dataset/lines'
 
 

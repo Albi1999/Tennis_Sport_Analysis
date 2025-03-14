@@ -135,7 +135,7 @@ def main():
     # Draw Keypoints (and lines) of the court onto black video 
     output_frames_black = courtline_detector.draw_keypoints_on_video(output_frames_black, refined_keypoints)
 
-    img_idxs = scraping_data_for_inference(video_n= video_number, output_path = 'data_inference', input_frames = output_frames_black,
+    _ = scraping_data_for_inference(video_n= video_number, output_path = 'data_inference', input_frames = output_frames_black,
                                  ball_shots_frames = ball_shots_frames , trace = 10, ball_detections = ball_detections_tracknet)
 
     # Instantiate Bounce Model
@@ -147,12 +147,14 @@ def main():
     std = data_mean_and_std[1]
 
 
-    predictions, confidences = make_prediction(model = model_bounce, best_model_path = 'models/best_bounce_model.pth',
+    predictions, confidences, img_idxs = make_prediction(model = model_bounce, best_model_path = 'models/best_bounce_model.pth',
                                          input_frames_directory = 'data_inference/images_inference', transform = evaluation_transform(mean, std), device = device)
     
     mask = np.array(predictions) == 1
 
     img_idxs_bounce = np.array(img_idxs)[mask].tolist()
+
+    print(img_idxs_bounce)
 
 
 
@@ -170,6 +172,7 @@ def main():
 
 
 
+    """
 
     ball_landing_frames = None # TODO : clustering + min + some logic based on size on img_idxs_bounce
     first_player_balls_frames = None # TODO : racket hits [::2]
@@ -348,19 +351,10 @@ def main():
     save_video(output_frames_real, output_video_path, fps)
     
 
- 
-
+    """
 
 
 
 if __name__ == '__main__':
     main()
 
-
-    '''
-    
-
-    # Draw frame number (top left corner) 
-    for i, frame in enumerate(video_frames_real):
-        cv2.putText(frame, f"Frame n {i}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255,0,0), 3)
-    '''
