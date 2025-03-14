@@ -149,7 +149,7 @@ def main():
 
 
         output_path_circle = 'data/trajectory_model_dataset/circles'
-        output_path_line = 'data/trajectory_model_dataset/lines'
+        #output_path_line = 'data/trajectory_model_dataset/lines'
 
 
         # video 105 : racket hit at 186 (missed by model)

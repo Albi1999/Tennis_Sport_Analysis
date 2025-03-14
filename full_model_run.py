@@ -19,7 +19,8 @@ from utils import (read_video,
                    scraping_data,
                    scraping_data_for_inference,
                    splitting_data,
-                   detect_frames_TRACKNET)
+                   detect_frames_TRACKNET,
+                   create_player_stats_box_video)
 from trackers import (PlayerTracker, BallTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from ball_landing import (BounceCNN, make_prediction, evaluation_transform)
@@ -32,10 +33,14 @@ import info
 import os 
 import pickle
 import numpy as np
+import sklearn.cluster
 
 
 
 def main():
+
+    DRAW_MINI_COURT = False
+    SAVE_STATS_BOX_SEPARATELY = True
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -149,8 +154,8 @@ def main():
 
     img_idxs_bounce = np.array(img_idxs)[mask].tolist()
 
-    print(img_idxs_bounce)
-    
+
+
  #   predictions_bounce_frame = np.where(np.array(predictions) == 1)[0].tolist()
  #   predictions_no_bounce_frame = np.where(np.array(predictions) == 0)[0].tolist()
 
@@ -165,16 +170,12 @@ def main():
 
 
 
-    
+
+    ball_landing_frames = None # TODO : clustering + min + some logic based on size on img_idxs_bounce
+    first_player_balls_frames = None # TODO : racket hits [::2]
 
 
 
-
-if __name__ == '__main__':
-    main()
-
-
-    '''
     # on actual video (our final output)
 
 
@@ -293,8 +294,71 @@ if __name__ == '__main__':
     )
 
     print(f"Score Heatmap animation saved to: {score_heatmap_path}")
+
+
+
+
+    output_frames_real = write_track(video_frames_real, ball_detections_tracknet)
+    output_frames_real = draw_ball_hits(output_frames_real, ball_shots_frames_audio) # Or ball_shots_frames
+
+
+    # Draw keypoints, according to the first frame
+    output_frames_real = courtline_detector.draw_keypoints_on_video(output_frames_real, refined_keypoints)
+
+
+
+    # Draw Mini Court
+    if DRAW_MINI_COURT:
+        output_frames_real = mini_court.draw_mini_court(output_frames_real)
+        output_frames_real = mini_court.draw_ball_landing_heatmap(
+            output_frames_real,
+            player_mini_court_detections,
+            ball_mini_court_detections,
+            ball_landing_frames,
+            first_player_balls_frames,
+            sigma=15
+        )
+        #output_frames_real = mini_court.draw_player_distance_heatmap(output_frames_real, player_mini_court_detections)
+        #output_frames_real = mini_court.draw_ball_landing_points(output_frames_real, ball_mini_court_detections, ball_landing_frames)
+        output_frames_real = mini_court.draw_shot_trajectories(
+            output_frames_real, 
+            player_mini_court_detections, 
+            ball_mini_court_detections, 
+            ball_landing_frames,
+            first_player_balls_frames
+        )     
+                  
+        output_frames_real = mini_court.draw_points_on_mini_court(output_frames_real, player_mini_court_detections, color = (255,255,0))
+      #  output_frames_real = mini_court.draw_points_on_mini_court(output_frames_real, ball_mini_court_detections, color = (0,255,255))
+
+    # Draw player stats
+    if SAVE_STATS_BOX_SEPARATELY:
+        # Create a separate video containing only the player stats box
+        stats_box_path = create_player_stats_box_video(player_stats_data_df, video_number) # Here we are using the custom function to save the stats box separately
+        print(f"Player Stats Box saved to: {stats_box_path}")
+    else:
+        # Draw player stats on the output video
+        output_frames_real = draw_player_stats(output_frames_real, player_stats_data_df) # Here we are using the original function
+
+    # Draw frame number (top left corner)
+    for i, frame in enumerate(output_frames_real):
+        cv2.putText(frame, f"Frame n {i}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+
+    # Save video
+    save_video(output_frames_real, output_video_path, fps)
     
 
+ 
+
+
+
+
+if __name__ == '__main__':
+    main()
+
+
+    '''
+    
 
     # Draw frame number (top left corner) 
     for i, frame in enumerate(video_frames_real):

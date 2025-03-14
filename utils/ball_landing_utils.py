@@ -124,7 +124,7 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
         # Exclude the initial ball bounce, as it comes from a serve and the ball tracking there is not optimal
         if idx in ball_bounce_frames and idx > ball_shots_frames_original[1]:
             # These frames have the more characteristic "V" shape that we are looking for
-            # Start one frame after the initial bounce (such that a V pattern is more clearly visible)
+            # Start two frame after the initial bounce (such that a V pattern is more clearly visible)
             # Follow for around 6 frames (this could be done more analytically with the velocity of the
             # ball to understand how much of a v-shape is visible, but for our use case this is enough)
             

@@ -277,6 +277,8 @@ def main():
     print(f"Score Heatmap animation saved to: {score_heatmap_path}")
 
     
+
+    
     # Draw Output
 
     # Draw bounding boxes around players + their IDs
