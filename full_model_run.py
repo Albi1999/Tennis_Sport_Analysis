@@ -45,7 +45,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Video to run inference on
-    video_number = 100
+    video_number = 115
 
     input_video_path = f'data/input_video{video_number}.mp4'  #
 

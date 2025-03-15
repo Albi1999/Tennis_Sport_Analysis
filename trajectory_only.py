@@ -35,7 +35,7 @@ import os
 
 def main():
 
-    video_numbers = [100]
+    video_numbers = [115]
 
     for video_number in video_numbers:
    # video_number = 100
@@ -156,6 +156,12 @@ def main():
         # video 107 : remove the last (269, because of voice of commentator seen as a peak), and also remove 203 
         # video 108 : Shot at 42 is the racket hitting the ground, the real shot was at 37 - last shot was at 91 instead of 89
         # video 109 : at 47 there is no shot, shot at 61 is at 65, 116 is at 124, 148 is at 153, 171 is at 177, missed shot at 211 
+        # video 110 : from frame 90 it becomes a mess
+        # video 111 : no shot at 274
+        # video 112 : no shot at 100, 167, 317, 466 but shot at 158, 193, 445
+        # video 113 : no shot at 144, missed shot at 33, 76
+        # video 114 : no shot at 65, 153, 219, 249
+        # video 115 : no shot at 44, 169, missed shot at 156
 
         # Look into output/trajectory_model_videos and look at the _frames videos : here we can see the frame the ball hits the ground
         # If the ball is too occluded : look into the output/trajectory_model_videos folder and there the normal output videos :
@@ -196,6 +202,65 @@ def main():
             ball_shots_frames.append(177)
             ball_shots_frames.append(211)
 
+        if video_number == 110:
+            ball_bounce_frames = [23, 60, 94, 123, 162, 200, 244, 273, 305, 334, 363, 390]
+            ball_shots_frames.remove(90)
+            ball_shots_frames.append(104)
+            ball_shots_frames.remove(112)
+            ball_shots_frames.remove(132)
+            ball_shots_frames.append(136)
+            ball_shots_frames.remove(169)
+            ball_shots_frames.append(174)
+            ball_shots_frames.remove(203)
+            ball_shots_frames.append(213)
+            ball_shots_frames.remove(229)
+            ball_shots_frames.remove(243)
+            ball_shots_frames.append(252)
+            ball_shots_frames.remove(270)
+            ball_shots_frames.append(282)
+            ball_shots_frames.remove(299)
+            ball_shots_frames.append(310)
+            ball_shots_frames.remove(327)
+            ball_shots_frames.append(340)
+            ball_shots_frames.remove(359)
+            ball_shots_frames.append(372)
+            ball_shots_frames.remove(385)
+            ball_shots_frames.append(400)
+            ball_shots_frames.remove(414)
+        
+        if video_number == 111:
+            ball_bounce_frames = [43, 76, 114, 144, 171, 207, 236]
+            ball_shots_frames.remove(274)
+        
+        if video_number == 112:
+            ball_bounce_frames = [45, 83, 109, 150, 178, 224, 268, 298, 330, 363, 405, 438]
+            ball_shots_frames.remove(100)
+            ball_shots_frames.append(158)
+            ball_shots_frames.remove(167)
+            ball_shots_frames.append(193)
+            ball_shots_frames.remove(317)
+            ball_shots_frames.append(445)
+            ball_shots_frames.remove(466)
+        
+        if video_number == 113:
+            ball_bounce_frames = [26, 67, 96, 133, 148]
+            ball_shots_frames.append(33)
+            ball_shots_frames.append(76)
+            ball_shots_frames.remove(144)
+        
+        if video_number == 114:
+            ball_bounce_frames = [19, 58, 83, 123, 152, 228]
+            ball_shots_frames.remove(65)
+            ball_shots_frames.append(69)
+            ball_shots_frames.remove(153)
+            ball_shots_frames.remove(219)
+            ball_shots_frames.remove(249)
+
+        if video_number == 115:
+            ball_bounce_frames = [17, 50, 75, 120, 150, 183, 213, 242]
+            ball_shots_frames.remove(44)
+            ball_shots_frames.append(156)
+            ball_shots_frames.remove(169)
 
         ball_shots_frames = sorted(ball_shots_frames)
 
@@ -211,8 +276,8 @@ def main():
 
 
         # Save video
-    #    save_video(output_frames, output_video_path, fps)
-    #    save_video(video_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
+        #save_video(output_frames, output_video_path, fps)
+        #save_video(video_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
 
 
 
