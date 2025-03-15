@@ -35,7 +35,7 @@ import os
 
 def main():
 
-    video_numbers = [115]
+    video_numbers = [118]
 
     for video_number in video_numbers:
    # video_number = 100
@@ -261,6 +261,27 @@ def main():
             ball_shots_frames.remove(44)
             ball_shots_frames.append(156)
             ball_shots_frames.remove(169)
+
+        if video_number == 116:
+            ball_bounce_frames = [12, 51, 81]
+        
+        if video_number == 117:
+            ball_bounce_frames = [14, 45, 74, 104, 138, 165, 196]
+            ball_shots_frames.remove(98)
+        
+        if video_number == 118:
+            ball_bounce_frames = [38, 69, 95, 145, 171, 208, 237, 281, 309]
+            ball_shots_frames.append(26)
+            ball_shots_frames.append(45)
+            ball_shots_frames.append(74)
+            ball_shots_frames.remove(95)
+            ball_shots_frames.append(109)
+            ball_shots_frames.remove(225)
+            ball_shots_frames.remove(321)
+                # this one had a really bad prediction:
+                # Output of the full_model_run.py:
+                # ['175', '176', '177', '211', '212', '213', '238', '239', '240', '241', '242', '243', '244', '254',
+                #  '255', '256', '257', '258', '259', '260', '282', '283', '284', '285', '286', '287', '292', '312', '313', '314', '315']
 
         ball_shots_frames = sorted(ball_shots_frames)
 
