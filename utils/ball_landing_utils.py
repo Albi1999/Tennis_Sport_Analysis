@@ -4,6 +4,23 @@ import os
 from copy import deepcopy
 import random 
 import shutil 
+import pandas as pd
+from sklearn.cluster import DBSCAN
+
+def cluster_series(arr, eps=3, min_samples=2, delay=3):
+    arr = np.array(sorted(map(int, arr))).reshape(-1, 1)
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+    labels = dbscan.fit_predict(arr)
+    
+    df = pd.DataFrame({'Value': arr.flatten(), 'Cluster': labels})
+    
+    # Filter out the outliers (cluster label -1)
+    df = df[df['Cluster'] != -1]
+    
+    min_values = df.groupby('Cluster')['Value'].min().reset_index()
+    min_values['Value'] -= delay  # Apply delay adjustment
+    
+    return min_values['Value'].values.tolist()
 
 def create_black_video(output_path, width, height, fps, frame_count):
     """

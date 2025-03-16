@@ -20,7 +20,8 @@ from utils import (read_video,
                    scraping_data_for_inference,
                    splitting_data,
                    detect_frames_TRACKNET,
-                   create_player_stats_box_video)
+                   create_player_stats_box_video,
+                   cluster_series)
 from trackers import (PlayerTracker, BallTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from ball_landing import (BounceCNN, make_prediction, evaluation_transform)
@@ -33,7 +34,6 @@ import info
 import os 
 import pickle
 import numpy as np
-import sklearn.cluster
 
 
 
@@ -45,7 +45,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Video to run inference on
-    video_number = 118
+    video_number = 101
 
     input_video_path = f'data/input_video{video_number}.mp4'  #
 
@@ -155,6 +155,11 @@ def main():
     img_idxs_bounce = np.array(img_idxs)[mask].tolist()
 
     print(img_idxs_bounce)
+    
+
+
+    print(cluster_series(img_idxs_bounce))
+
 
 
 
