@@ -441,11 +441,13 @@ if __name__ == "__main__":
 
     # Initialize and train model
     model = BounceCNN()
- #   trained_model = train_model(model, train_loader, val_loader, num_epochs = 50) # Comment this line if you want to skip training
+    trained_model = train_model(model, train_loader, val_loader, num_epochs = 50) # Comment this line if you want to skip training
     
     # Load best model
     model.load_state_dict(torch.load('models/best_bounce_model.pth'))
     metrics = evaluate_model(model, test_loader)
+    
+    
     
 
     
