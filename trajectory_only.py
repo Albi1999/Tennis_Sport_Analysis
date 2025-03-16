@@ -34,11 +34,13 @@ import os
 
 
 def main():
+    SCRAPING = False
 
-    video_numbers = [118]
+    # Change here which videos to get data from
+    video_numbers = [100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
-   # video_number = 100
+
 
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -132,10 +134,8 @@ def main():
 
 
         # Draw ball tracking
-        # Use both methods : circle/line
         if ball_tracker_method == 'tracknet':
-            trace = 10
-            # CHANGE HERE CIRCLE/LINE
+            trace = 5 # CHANGE TRACE HERE
             output_frames = write_track(video_frames, ball_detections_tracknet, ball_shots_frames, trace = trace, draw_mode= 'circle')
 
         
@@ -148,7 +148,7 @@ def main():
             cv2.putText(frame, f"Frame n {i}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 3, (255,0,0), 3)
 
 
-        output_path_circle = 'data_test'
+        output_path_circle = 'data/trajectory_model_dataset/circles'
         #output_path_line = 'data/trajectory_model_dataset/lines'
 
 
@@ -170,9 +170,9 @@ def main():
             ball_bounce_frames = [49, 75, 106, 142]
         if video_number == 101:
             # removed 169 because trace is just a single point ; bad for training
-            ball_bounce_frames = [20,50,76,106,138,197,230,273,301]
+            ball_bounce_frames = [20,50,77,106,138,197,230,273,301]
         if video_number == 102:
-            ball_bounce_frames = [13,41,73,104,131,159,190,221,270,299,329,363,414]
+            ball_bounce_frames = [13,41,73,105,131,159,190,221,270,299,329,363,414]
         if video_number == 103:
             ball_bounce_frames = [23,66,97]
         if video_number == 105:
@@ -289,10 +289,14 @@ def main():
         
 
         # CHANGE HERE PATH
-        scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
+        if SCRAPING:
+            scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
 
         # change accordingly if on line or on circles
-   #     _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+  
+        if not SCRAPING:
+            _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+            break
     
 
 

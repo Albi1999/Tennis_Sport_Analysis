@@ -144,9 +144,17 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
             # Start two frame after the initial bounce (such that a V pattern is more clearly visible)
             # Follow for around 6 frames (this could be done more analytically with the velocity of the
             # ball to understand how much of a v-shape is visible, but for our use case this is enough)
+
+            # NEW LOGIC DEPENDING ON TRACE!!
             
+            if trace == 10:
+                bounce_frames_curr = [idx+2+i for i in range(6)]
             
-            bounce_frames_curr = [idx+2+i for i in range(6)]
+            if trace == 3:
+                bounce_frames_curr = [idx + 1]
+
+            if trace == 5:
+                bounce_frames_curr = [idx+1+i for i in range(3)]
 
 
             #### No Bounce Helper
