@@ -245,8 +245,8 @@ def evaluate_model(model, test_loader):
     plt.tight_layout()
     
     # Save the plot
-    os.makedirs('results', exist_ok=True)
-    plt.savefig('results/confusion_matrix.png')
+    os.makedirs('output/cnn_training', exist_ok=True)
+    plt.savefig('output/cnn_training/confusion_matrix.png')
     plt.show()
     
     return {

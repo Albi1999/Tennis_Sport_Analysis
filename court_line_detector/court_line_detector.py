@@ -5,9 +5,7 @@ import cv2
 import numpy as np
 from scipy.spatial import distance
 from scipy.optimize import linear_sum_assignment
-from filterpy.kalman import KalmanFilter
 from skimage.measure import ransac
-from skimage.transform import ProjectiveTransform
 
 
 class CourtLineDetector:

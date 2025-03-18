@@ -187,7 +187,7 @@ def remove_outliers_final(ball_track, thresh = 150, consecutive_frames = 3):
 
 
 
-def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'circle'):
+def write_track(frames, ball_track, ball_shots_frames=[], trace = 7, draw_mode = 'circle'):
 
     # Use a set (because it has lookup in O(1))
     ball_shots_frames = set(ball_shots_frames)
@@ -225,7 +225,7 @@ def write_track(frames, ball_track, ball_shots_frames, trace = 7, draw_mode = 'c
         # Draw circles for all valid points
         if draw_mode == 'circle':
             for point in valid_points:
-                frame = cv2.circle(frame, point, radius=2, color=(0, 0, 255), thickness=10)
+                frame = cv2.circle(frame, point, radius=2, color=(0, 255, 255), thickness=10)
         
         elif draw_mode == 'line':
             # Draw lines between consecutive points
@@ -501,11 +501,11 @@ def refine_audio(ball_shots_frames_audio, fps, audio_file):
 
 
 def draw_ball_hits(video_frames, hit_frames):
-
+    """ Draw the ball hits on the video frames """
     output_video_frames = []
     counter = 0
     for i,frame in enumerate(video_frames):
-        cv2.putText(frame, f"Racket Hit n. {counter}", (10,200), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,255), 1)
+        cv2.putText(frame, f"Racket Hits: {counter}", (10, 100), cv2.FONT_HERSHEY_DUPLEX , 1, (0,255,0), 2)
         if i in hit_frames:
             counter += 1
 

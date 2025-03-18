@@ -21,7 +21,7 @@ class MiniCourt():
         self.drawing_rectangle_width = 250          # Width of the mini court in pixels (depends on the image size)
         self.drawing_rectangle_height = 500         # Height of the mini court in pixels (depends on the image size)
         self.buffer = 50                            # Distance from the right and top of the frame to the mini court
-        self.padding_court= 50                      # Padding from the mini court to the court (depends on the image size)
+        self.padding_court= 30                      # Padding from the mini court to the court (depends on the image size)
 
         # Define the mini court in the frame
         self.set_canvas_background_box_position(frame)

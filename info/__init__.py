@@ -4,11 +4,3 @@ HALF_COURT_LINE_HEIGHT = 11.88
 SERVICE_LINE_WIDTH = 6.4
 DOUBLE_ALLY_DIFFERENCE = 1.37
 NO_MANS_LAND_HEIGHT = 5.48
-
-# Toy example 2
-PLAYER_1_HEIGHT_METERS = 1.88           # Novak Djokovic
-PLAYER_2_HEIGHT_METERS = 1.91           # Lorenzo Sonego
-
-# Real example 35
-#PLAYER_1_HEIGHT_METERS = 1.96           # Taylor Fritz
-#PLAYER_2_HEIGHT_METERS = 1.83           # Alex de Minaur

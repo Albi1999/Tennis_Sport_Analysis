@@ -7,7 +7,7 @@ import shutil
 import pandas as pd
 from sklearn.cluster import DBSCAN
 
-def cluster_series(arr, eps=3, min_samples=2, delay=3):
+def cluster_series(arr, eps=3, min_samples=2, delay=2):
     arr = np.array(sorted(map(int, arr))).reshape(-1, 1)
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
     labels = dbscan.fit_predict(arr)
