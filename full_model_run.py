@@ -6,6 +6,8 @@ from utils import (read_video,
                    create_black_video,
                    scraping_data_for_inference,
                    detect_frames_TRACKNET,
+                   get_ball_shot_frames_visual,
+                   combine_audio_visual,
                    cluster_series)
 from trackers import (PlayerTracker, BallTrackerNetTRACE)
 from ball_landing import (BounceCNN, make_prediction, evaluation_transform)
@@ -74,12 +76,19 @@ def main():
     player_detections, chosen_players_ids = player_tracker.choose_and_filter_players(refined_keypoints, player_detections)
             
     # Get Racket Hits based on audio
+
+
+    ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_tracknet, fps)
     ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
-    ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
-    print("Ball Shots from Audio : ", ball_shots_frames_audio)
-    print("Audio Refinment :", ball_shots_frames)
+
+    ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
+                                                ball_shots_frames_audio= ball_shots_frames_audio, 
+                                                fps = fps, 
+                                                max_distance_param = 7)
+    
 
 
+    print(f"Ball Shot Frames : {ball_shots_frames}")
 
     ## Draw Output ##
 

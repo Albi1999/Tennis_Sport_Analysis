@@ -15,6 +15,7 @@ from utils import (read_video,
                    convert_pixel_distance_to_meters,
                    draw_player_stats,
                    remove_outliers_final,
+                   combine_audio_visual,
                    create_black_video,
                    scraping_data,
                    splitting_data,
@@ -37,7 +38,7 @@ def main():
     SCRAPING = False
 
     # Change here which videos to get data from
-    video_numbers = [100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
+    video_numbers = [110] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
 
@@ -110,15 +111,20 @@ def main():
                                                                                                                                 ball_detections,
                                                                                                                                 refined_keypoints,
                                                                                                                                 chosen_players_ids)
-        
 
-        # Get racket hits 
+        ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_tracknet, fps)
         ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
-        ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
+     #   ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
+
+        ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
+                                                  ball_shots_frames_audio= ball_shots_frames_audio, 
+                                                  fps = fps, 
+                                                  max_distance_param = 7)
 
 
+        print("Ball Shots from Visual : ", ball_shots_frames_visual)
         print("Ball Shots from Audio : ", ball_shots_frames_audio)
-        print("Audio Refinment :", ball_shots_frames)
+        print("Combined :", ball_shots_frames)
 
         
         # Draw Output

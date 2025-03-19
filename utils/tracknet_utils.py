@@ -272,21 +272,21 @@ def detect_frames_TRACKNET(video_frames, video_number, tracker, video_width, vid
 
     
 
-def get_ball_shot_frames_visual(ball_positions, fps, area):
+def get_ball_shot_frames_visual(ball_positions, fps):#, area):
     """Based on change of direction in the mini court coordinates"""
 
 
   #  ball_positions = [x.get(1,[]) for x in ball_positions]
     df_ball_positions = pd.DataFrame(ball_positions,columns=['x','y'])
-    df_ball_positions = df_ball_positions.iloc[area[0]:area[1]]
+   # df_ball_positions = df_ball_positions.iloc[area[0]:area[1]]
     # Create a rolling window for the y positions
-    window_size = max(5, fps // 10)  # Adaptive window size based on fps
+    window_size = max(10, fps // 5)  # Adaptive window size based on fps
     df_ball_positions['y_rolling_mean'] = df_ball_positions['y'].rolling(window=window_size, min_periods=1, center=False).mean()
-    df_ball_positions['delta_y'] = df_ball_positions['y_rolling_mean'].diff()
+  #  df_ball_positions['delta_y'] = df_ball_positions['y_rolling_mean'].diff()
     df_ball_positions['ball_hit'] = 0
 
-    plt.plot(df_ball_positions['delta_y'])
-    plt.savefig("VISUAL.png")
+  #  plt.plot(df_ball_positions['y_rolling_mean'])
+   # plt.savefig("VISUAL.png")
 
 
 
@@ -294,32 +294,62 @@ def get_ball_shot_frames_visual(ball_positions, fps, area):
     minimum_change_frames_for_hit = max(5, fps//20)
 
 
-    for i in range(1,len(df_ball_positions)- int(minimum_change_frames_for_hit)):
-        negative_position_change = df_ball_positions['y_rolling_mean'].iloc[i] >0 and df_ball_positions['y_rolling_mean'].iloc[i+1] <0
-        positive_position_change = df_ball_positions['y_rolling_mean'].iloc[i] <0 and df_ball_positions['y_rolling_mean'].iloc[i+1] >0
+    for i in range(len(df_ball_positions)- int(minimum_change_frames_for_hit)):
+        # Look for max & mins (change of direction indicators, given our ball tracking is consistent)
 
-        if negative_position_change or positive_position_change:
-            change_count = 0 
-            for change_frame in range(i+1, i+int(minimum_change_frames_for_hit)+1):
-                negative_position_change_following_frame = df_ball_positions['y_rolling_mean'].iloc[i] >0 and df_ball_positions['y_rolling_mean'].iloc[change_frame] <0
-                positive_position_change_following_frame = df_ball_positions['y_rolling_mean'].iloc[i] <0 and df_ball_positions['y_rolling_mean'].iloc[change_frame] >0
-
-                if negative_position_change and negative_position_change_following_frame:
-                    change_count+=1
-                elif positive_position_change and positive_position_change_following_frame:
-                    change_count+=1
+        maximum = (df_ball_positions['y_rolling_mean'].iloc[i-1] < df_ball_positions['y_rolling_mean'].iloc[i]) and \
+            (df_ball_positions['y_rolling_mean'].iloc[i+1] < df_ball_positions['y_rolling_mean'].iloc[i])
         
-            if change_count>minimum_change_frames_for_hit-1:
+        minimum = (df_ball_positions['y_rolling_mean'].iloc[i-1] > df_ball_positions['y_rolling_mean'].iloc[i]) and \
+            (df_ball_positions['y_rolling_mean'].iloc[i+1] > df_ball_positions['y_rolling_mean'].iloc[i])
+        
+        # Check if it really is a directional change
+        if minimum or maximum:
+            array_check = []
+
+            # Check the area around the current position we are looking at
+            for change_frame in range(i- int(minimum_change_frames_for_hit), i+ int(minimum_change_frames_for_hit)):
+                # Exclude the min/max to be checked
+                if change_frame == i:
+                    continue 
+                # Check if in the range, our hypothesized minimum is really a minimum
+                if minimum:
+                    array_check.append(df_ball_positions['y_rolling_mean'].iloc[change_frame] > df_ball_positions['y_rolling_mean'].iloc[i])
+                elif maximum:
+                    array_check.append(df_ball_positions['y_rolling_mean'].iloc[change_frame] < df_ball_positions['y_rolling_mean'].iloc[i])
+            
+            if all(array_check) and len(array_check) > 0:
                 df_ball_positions['ball_hit'].iloc[i] = 1
+            else:
+                # In this case, we smooth the current area even more to make another check (its possible that we have some fluctuation around the min/max due to
+                # the ball tracker not being perfectly consistent)
+                for window_size_curr in [15,20,25,30]:
+                    array_check = []
+                    df_ball_y_positions_of_interest = df_ball_positions['y'].rolling(window=window_size_curr, min_periods=1, center=False).mean()
+
+                    # Rerun the same code as above , # TODO : do this in a function so it is a simple call
+                    # Check the area around the current position we are looking at
+                    for change_frame in range(i- int(minimum_change_frames_for_hit), i+ int(minimum_change_frames_for_hit)):
+                        # Exclude the min/max to be checked
+                        if change_frame == i:
+                            continue 
+                        # Check if in the range, our hypothesized minimum is really a minimum
+                        if minimum:
+                            array_check.append(df_ball_positions['y_rolling_mean'].iloc[change_frame] > df_ball_positions['y_rolling_mean'].iloc[i])
+                        elif maximum:
+                            array_check.append(df_ball_positions['y_rolling_mean'].iloc[change_frame] < df_ball_positions['y_rolling_mean'].iloc[i])
+                    
+                    # If with more smoothing we found something, break out of the loop
+                    if all(array_check) and len(array_check) > 0:
+                        df_ball_positions['ball_hit'].iloc[i] = 1
+                        break
+
 
     hit_frames = df_ball_positions[df_ball_positions['ball_hit']==1].index.tolist()
 
     return hit_frames
 
 
-
-
-    
 
 def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     # Load the audio file
@@ -342,9 +372,9 @@ def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     # Find peaks in the envelope
     # Lower height threshold to catch more peaks
     peaks, _ = find_peaks(y_envelope, 
-                        height=0.02,  # Lower threshold to catch more peaks
-                        distance=int(0.5 * sr),  # Minimum distance between peaks 
-                        prominence=0.01)  # Find all distinct peaks 
+                        height=0.01,  # Lower threshold to catch more peaks
+                        distance=int(0.25 * sr),  # Minimum distance between peaks 
+                        prominence=0.006)  # Find all distinct peaks 
     
     # Convert peak positions to time (seconds)
     hit_times = peaks / sr
@@ -441,6 +471,73 @@ def get_ball_shot_frames_audio_refinement(audio_file, fps, frames_start=None, fr
     hit_frames = [int(round(time * fps)) for time in hit_times]
 
     return hit_frames
+
+
+import bisect
+
+def find_closest_matches(array_a, array_b):
+    """ Use binary search to find closest fitting elements in two arrays"""
+    # Sort array_b first
+    sorted_b = sorted(array_b)
+    matches = []
+    
+    for a in array_a:
+        # Find insertion point
+        pos = bisect.bisect_left(sorted_b, a)
+        
+        # Check boundary cases
+        if pos == 0:
+            closest_b = sorted_b[0]
+        elif pos == len(sorted_b):
+            closest_b = sorted_b[-1]
+        else:
+            # Compare the two neighboring elements
+            if abs(a - sorted_b[pos-1]) <= abs(a - sorted_b[pos]):
+                closest_b = sorted_b[pos-1]
+            else:
+                closest_b = sorted_b[pos]
+        
+        matches.append((a, closest_b, abs(a - closest_b)))
+    
+    return matches
+
+
+def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps, max_distance_param = 12):
+    """
+    Idea is that audio will detect every little peak in audio and therefore also a lot of wrong
+    information (shoe sounds, players moaning, crowd screaming etc.). We try to refine that by
+    finding the closest match to every found directional change in the visual approach ;
+    if there is no close match to a found directional change in the visual approach, we deem it
+    as a faulty detected racket hit.
+
+    max_distance_param would probably need video-to-video tuning.
+    """
+    final_racket_hits = []
+
+  
+
+    matches = find_closest_matches(ball_shots_frames_visual, ball_shots_frames_audio)
+
+    for elem in matches:
+        # Only add the ones that are actually close to one another
+        if elem[2] <= max_distance_param:
+            final_racket_hits.append(elem[1])
+
+    # Check if first from audio is in : should be the initial racket hit (serve) , that the visual model
+    # might have more problems with (due to ball tracking of first hit)
+
+    if final_racket_hits[0] != ball_shots_frames_audio[0]:
+        final_racket_hits.insert(0,ball_shots_frames_audio[0])
+
+    return final_racket_hits
+        
+
+
+            
+
+
+
+
 
 
 def refine_audio(ball_shots_frames_audio, fps, audio_file):
