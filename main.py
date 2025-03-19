@@ -11,7 +11,8 @@ from utils import (read_video,
                    scraping_data_for_inference,
                    detect_frames_TRACKNET,
                    create_player_stats_box_video,
-                   cluster_series)
+                   cluster_series,
+                   filter_bounce_frames_for_player)
 from trackers import (PlayerTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from ball_landing import (BounceCNN, make_prediction, evaluation_transform)
@@ -32,8 +33,11 @@ def main():
 
     ######## CONFIG ########
     
+    # Select the player
+    SELECTED_PLAYER = 'Lower' # 'Upper' or 'Lower'
+    
     # Draw Options
-    DRAW_MINI_COURT = True
+    DRAW_MINI_COURT = False
     DRAW_STATS_BOX = False
 
     # Check if GPU is available
@@ -145,8 +149,11 @@ def main():
     print(f"Ground Truth Bounce Frames : {ground_truth_bounce[1:]}")
     
     # TODO: Create a function to select ONLY the ball landing frames in the upper part of the court
-    first_player_balls_frames = ball_landing_frames[::2]
-    print(f"First Player Ball Frames : {first_player_balls_frames}")
+    player_balls_frames = filter_bounce_frames_for_player(ball_landing_frames, 
+                                                          ball_detections, 
+                                                          refined_keypoints, 
+                                                          player=SELECTED_PLAYER)
+    print(f"{SELECTED_PLAYER} Player Ball Frames : {player_balls_frames}")
     
     
 
@@ -248,7 +255,7 @@ def main():
         player_mini_court_detections,
         ball_mini_court_detections,
         ball_landing_frames,
-        first_player_balls_frames,
+        player_balls_frames,
         output_path=f"output/animations/ball_heatmap_animation{video_number}.mp4",
         sigma=15,
         color_map=cv2.COLORMAP_HOT,
@@ -281,30 +288,32 @@ def main():
     output_frames = draw_ball_hits(output_frames, ball_shots_frames_audio)
 
     # Draw keypoints, according to the first frame
-    output_frames = courtline_detector.draw_keypoints_on_video(output_frames, refined_keypoints)
+    all_keypoints = courtline_detector.detect_keypoints_for_all_frames(video_frames)
+    output_frames = courtline_detector.draw_keypoints_on_video_dinamically(output_frames, all_keypoints)
 
     # Draw Mini Court
     if DRAW_MINI_COURT:
         output_frames = mini_court.draw_mini_court(output_frames)
         output_frames = mini_court.draw_ball_landing_heatmap(
-            output_frames,
-            player_mini_court_detections,
-            ball_mini_court_detections,
-            ball_landing_frames,
-            first_player_balls_frames,
-            sigma=15
-        )
+                output_frames,
+                player_mini_court_detections,
+                ball_mini_court_detections,
+                ball_landing_frames,
+                player_balls_frames,
+                sigma=15
+                )
+
     #    output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections)
     #    output_frames = mini_court.draw_ball_landing_points(output_frames, ball_mini_court_detections, ball_landing_frames)
-        output_frames = mini_court.draw_shot_trajectories(
-            output_frames, 
-            player_mini_court_detections, 
-            ball_mini_court_detections, 
-            ball_landing_frames,
-            first_player_balls_frames)     
-                  
+        '''   
+        output_frames = mini_court.draw_shot_trajectories(output_frames, 
+                                            player_mini_court_detections, 
+                                            ball_mini_court_detections, 
+                                            ball_landing_frames,
+                                            player_balls_frames)     
+        '''
         output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
-    #    output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
+        output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
 
     # Draw player stats box
     if DRAW_STATS_BOX:

@@ -8,6 +8,7 @@ import pandas as pd
 from sklearn.cluster import DBSCAN
 
 def cluster_series(arr, eps=3, min_samples=2, delay=2):
+    """Cluster a series of frames and return the minimum value of each cluster with a delay adjustment."""
     arr = np.array(sorted(map(int, arr))).reshape(-1, 1)
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
     labels = dbscan.fit_predict(arr)
@@ -97,16 +98,6 @@ def scraping_data_for_inference(video_n, output_path, input_frames, ball_shots_f
 
 
     return saved_frames
-
-
-
-
-
-
-
-
-
-    
 
 
 def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_shots_frames, trace, ball_detections):
@@ -278,6 +269,68 @@ def splitting_data(main_dir, train_ratio = 0.75, val_ratio = 0.15, test_ratio = 
               f"Test={stats['test']} ({stats['test']/stats['total']:.1%})")
     
     return train_dir, val_dir, test_dir
+
+def filter_bounce_frames_for_player(ball_landing_frames, ball_detections, keypoints, player="Lower"):
+    """
+    Filters bounce frames based on the player's court position.
+
+    - If the player is "Lower", keep only the bounces that land in the opponent's (upper) court.
+    - If the player is "Upper", keep only the bounces that land in the opponent's (lower) court.
+
+    Parameters:
+        ball_landing_frames (list): List of frames where the ball lands.
+        ball_detections (list): Ball position data for each frame.
+        keypoints (list): Court keypoints used to determine the net position.
+        player (str): Player perspective ("Lower" or "Upper").
+
+    Returns:
+        list: Filtered list of frames where the ball lands in the opponent's court.
+    """
+
+    # Calculate the net's y-coordinate as the midpoint between keypoints 10 and 11
+    net_y = (keypoints[10][1] + keypoints[11][1]) / 2
+
+    # List to store filtered frames
+    filtered_frames = []
+
+    for frame in ball_landing_frames:
+        # Ensure the frame index is valid
+        if frame >= len(ball_detections):
+            continue
+            
+        # Check if ball_detections is in bbox format (dictionary with key 1)
+        try:
+            # Check if ball_detections is in bbox format (dictionary with key 1)
+            if isinstance(ball_detections[frame], dict) and 1 in ball_detections[frame]:
+                bbox = ball_detections[frame][1]
+                # Skip if the bbox is out of bounds
+                if bbox[0] == 6000:
+                    continue
+                # Calcola il centro della bbox
+                ball_x = (bbox[0] + bbox[2]) / 2
+                ball_y = (bbox[1] + bbox[3]) / 2
+            # Check if it's in the format [timestamp, (x, y), visibility]
+            elif isinstance(ball_detections[frame], tuple) or isinstance(ball_detections[frame], list):
+                if ball_detections[frame][0] is None:
+                    continue
+                _, (ball_x, ball_y), _ = ball_detections[frame]
+            else:
+                continue
+
+            # Determine if the ball lands in the upper half of the court
+            in_upper_court = ball_y < net_y
+
+            # Add frame if it matches the selected player's opponent's court
+            if (player == "Lower" and in_upper_court) or (player == "Upper" and not in_upper_court):
+                filtered_frames.append(frame)
+                
+        except (IndexError, KeyError, TypeError, ValueError) as e:
+            # Log error if needed
+            # print(f"Error processing frame {frame}: {e}")
+            continue
+
+    return filtered_frames
+
 
     
 

@@ -46,6 +46,7 @@ class CourtLineDetector:
             [250, 250], [350, 250]
         ])
     
+    
     def detect_keypoints(self, frame):
         """
         Detect the keypoints of the tennis court based on the trained model.
@@ -65,7 +66,6 @@ class CourtLineDetector:
         keypoints = output.reshape(-1, 2)
         keypoints = self.snap_keypoints_to_template(frame, keypoints)
         return keypoints
-
     
     def snap_keypoints_to_template(self, frame, keypoints):
         """
@@ -238,4 +238,56 @@ class CourtLineDetector:
         cv2.line(frame, keypoints[12], keypoints[13], color=(0,255,0), thickness= 1)
 
         return frame 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    def detect_keypoints_for_all_frames(self, video_frames):
+        """
+        Detect the keypoints for all the frames of the video
+        
+        Args:
+            video_frames (list): List of frames of the video.
+            
+        Returns:
+            all_keypoints (list): List of keypoints for all the frames.
+        """
+        all_keypoints = []
+        
+        print("Detecting keypoints for all frames...")
+        for i, frame in enumerate(video_frames):
+            keypoints = self.predict(frame)
+            all_keypoints.append(keypoints)
+            
+        return all_keypoints
+    
+    def draw_keypoints_on_video_dinamically(self, video_frames, all_keypoints):
+        """
+        Draw keypoints on all frames of the video, using different keypoints for each frame.
 
+        Args:
+            video_frames (list): List of video frames.
+            all_keypoints (list): List of keypoint arrays, one for each frame.
+
+        Returns:
+            output_video_frames (list): Frames with drawn keypoints and lines.
+        """
+        output_video_frames = []
+
+        for i, frame in enumerate(video_frames):
+            # Create a copy of the frame to avoid modifying the original
+            frame_copy = frame.copy()
+            
+            # Draw keypoints and lines for this specific frame
+            frame_copy = self.draw_keypoints(frame_copy, all_keypoints[i])
+            frame_copy = self.draw_lines_between_keypoints(frame_copy, all_keypoints[i])
+            
+            output_video_frames.append(frame_copy)
+        
+        return output_video_frames
+    
