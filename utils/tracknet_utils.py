@@ -14,6 +14,7 @@ from utils import euclidean_distance
 from copy import deepcopy
 import pandas as pd
 import pickle 
+from utils import get_center_of_bbox
 
 
 
@@ -502,7 +503,42 @@ def find_closest_matches(array_a, array_b):
     return matches
 
 
-def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps, max_distance_param = 12):
+def cluster_court_positions(hits):
+    """
+    Cluster consecutive court positions from a list of (hit_frame, court_position) tuples.
+    
+    Args:
+        hits: List of (hit_frame, court_position) tuples, ordered by hit_frame ascending
+        
+    Returns:
+        List of clusters, where each cluster is a list of (hit_frame, court_position) tuples
+        with the same court position
+    """
+    if not hits:
+        return []
+    
+    clusters = []
+    current_cluster = [hits[0]]
+    current_position = hits[0][1]
+    
+    for hit in hits[1:]:
+        if hit[1] == current_position:
+            # Same court position, add to current cluster
+            current_cluster.append(hit)
+        else:
+            # Different court position, start a new cluster
+            clusters.append(current_cluster)
+            current_cluster = [hit]
+            current_position = hit[1]
+    
+    # Don't forget to add the last cluster
+    if current_cluster:
+        clusters.append(current_cluster)
+    
+    return clusters
+
+
+def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps, player_boxes, ball_detections, keypoints, max_distance_param = 12, adjustment = 150):
     """
     Idea is that audio will detect every little peak in audio and therefore also a lot of wrong
     information (shoe sounds, players moaning, crowd screaming etc.). We try to refine that by
@@ -510,26 +546,97 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
     if there is no close match to a found directional change in the visual approach, we deem it
     as a faulty detected racket hit.
 
+    Additionally, also check the position of the ball to the player(s) and see if the ball
+    is close to one player (indicating that a racket hit is happening). This is in order
+    to make the racket hit detection even more robust.
+
+
+    adjustment is used to adjust for the fact that the ball is in the air and such the 
+    keypoint coordinates are not directly perfect.
+
     max_distance_param would probably need video-to-video tuning.
     """
     final_racket_hits = []
 
-  
+    # Get the player positions over all frames
+    player_positions_centered = defaultdict(list)
+    # Process each frame
+    for frame_num, player_bbox in enumerate(player_boxes):
+        # Process players
+        output_player_bboxes_dict = {}
+        
+        for player_id, bbox in player_bbox.items():
+            # Get center positions of players
+            center_pos = get_center_of_bbox(bbox)
+
+            player_positions_centered[player_id].append(center_pos)
+
+    # Get player ids
+    player_ids = list(player_positions_centered.keys())
+
+    player_0_pos = player_positions_centered[player_ids[0]]
+    player_1_pos = player_positions_centered[player_ids[1]]
+
+
+
+    # Calculate the net's y-coordinate based on the keypoints found at the net
+    net_y = ((keypoints[10][1] + keypoints[11][1]) / 2) - adjustment
 
     matches = find_closest_matches(ball_shots_frames_visual, ball_shots_frames_audio)
 
     for elem in matches:
         # Only add the ones that are actually close to one another
         if elem[2] <= max_distance_param:
-            final_racket_hits.append(elem[1])
+            
+            # And also check in which court side we are
+            y_coord_hit_frame = ball_detections[elem[1]][1]
+            if y_coord_hit_frame <= net_y:
+                # Upper court : 1
+                final_racket_hits.append((elem[1], 1))
+            else:
+                # Lower court : 0
+                final_racket_hits.append((elem[1],0))
 
     # Check if first from audio is in : should be the initial racket hit (serve) , that the visual model
     # might have more problems with (due to ball tracking of first hit)
 
     if final_racket_hits[0] != ball_shots_frames_audio[0]:
-        final_racket_hits.insert(0,ball_shots_frames_audio[0])
+        if ball_detections[ball_shots_frames_audio[0]][1] <= net_y:
+            final_racket_hits.insert(0,(ball_shots_frames_audio[0], 1))
+        else:
+            final_racket_hits.insert(0,(ball_shots_frames_audio[0], 0))
 
-    return final_racket_hits
+
+    # Cluster the found positions of each court side (i.e such that we can then determine
+    # which is the correct racket hit, because the player only hits the ball once)
+
+    clustered_final_racket_hits = cluster_court_positions(final_racket_hits)
+
+
+    complete_final_racket_hits = []
+    # Now search the closest the ball was to the player on the respective court side
+    for clustered_hit_frame in clustered_final_racket_hits:
+        curr_min = np.inf
+        correct_hit_frame = 0
+        for hit_frame in clustered_hit_frame:
+            # Calculate the euclidean distances of players to the possible hits and find the minimal one
+            dist_0 = int(euclidean_distance(tuple(map(int, ball_detections[hit_frame[0]])), player_0_pos[hit_frame[0]]))
+            dist_1 = int(euclidean_distance(tuple(map(int, ball_detections[hit_frame[0]])), player_1_pos[hit_frame[0]]))
+            found_min = min(dist_0,dist_1)
+            if found_min < curr_min:
+                correct_hit_frame = hit_frame[0]
+                curr_min = found_min 
+        
+        complete_final_racket_hits.append(correct_hit_frame)
+        
+
+
+
+
+
+
+
+    return complete_final_racket_hits
         
 
 

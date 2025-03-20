@@ -38,7 +38,7 @@ def main():
     SCRAPING = False
 
     # Change here which videos to get data from
-    video_numbers = [110] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
+    video_numbers = [100] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
 
@@ -118,8 +118,12 @@ def main():
 
         ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
                                                   ball_shots_frames_audio= ball_shots_frames_audio, 
-                                                  fps = fps, 
-                                                  max_distance_param = 7)
+                                                  fps = fps,
+                                                  player_boxes = player_detections, 
+                                                  keypoints = refined_keypoints,
+                                                  ball_detections = ball_detections_tracknet,
+                                                  max_distance_param = 7,
+                                                  adjustment = 0)
 
 
         print("Ball Shots from Visual : ", ball_shots_frames_visual)
