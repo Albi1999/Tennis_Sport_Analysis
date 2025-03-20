@@ -38,7 +38,7 @@ def main():
     SCRAPING = False
 
     # Change here which videos to get data from
-    video_numbers = [100] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
+    video_numbers = [101] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
 
@@ -111,11 +111,21 @@ def main():
                                                                                                                                 ball_detections,
                                                                                                                                 refined_keypoints,
                                                                                                                                 chosen_players_ids)
-
+        mini_court_keypoints = mini_court.drawing_key_points
         ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_tracknet, fps)
         ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
      #   ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
 
+     #   ball_shots_frames_MINI = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
+     #                                             ball_shots_frames_audio= ball_shots_frames_audio, 
+     #                                             fps = fps,
+     #                                             player_boxes = player_mini_court_detections, 
+     #                                             keypoints = mini_court_keypoints,
+     #                                             ball_detections = ball_mini_court_detections,
+      #                                            max_distance_param = 7,
+     ##                                             adjustment = 0,
+      #                                            MINI_COURT= True)
+        
         ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
                                                   ball_shots_frames_audio= ball_shots_frames_audio, 
                                                   fps = fps,
@@ -123,12 +133,15 @@ def main():
                                                   keypoints = refined_keypoints,
                                                   ball_detections = ball_detections_tracknet,
                                                   max_distance_param = 7,
-                                                  adjustment = 0)
+                                                  adjustment = 0,
+                                                  MINI_COURT= False,
+                                                  CLUSTERING= False)
 
 
         print("Ball Shots from Visual : ", ball_shots_frames_visual)
         print("Ball Shots from Audio : ", ball_shots_frames_audio)
         print("Combined :", ball_shots_frames)
+    #    print("Combined using Mini Court : ", ball_shots_frames_MINI)
 
         
         # Draw Output
