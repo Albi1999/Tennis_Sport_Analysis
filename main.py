@@ -281,6 +281,9 @@ def main():
 
     ######## DRAW OUTPUT ########
     
+    # Draw Player Detection
+    output_frames = player_tracker.draw_ellipse_bboxes(video_frames, player_detections)
+
     # Draw Ball Detection
     output_frames = write_track(video_frames, ball_detections_tracknet)
     

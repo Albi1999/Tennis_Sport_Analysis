@@ -247,25 +247,50 @@ class PlayerTracker:
         return output_video_frames
 
     # TODO : Implement this method with supervision library
-    def draw_enhanced_bboxes(self, video_frames, player_detections):
+    def draw_ellipse_bboxes(self, video_frames, player_detections):
         """
-        Draw bounding boxes as well as IDs for the players.
-
+        Draw ellipses around the players in cyan color.
+        
         Args:
-            video_frames : List of all the frames of the video.
-            player_detections : List returned by 'detect_frames()'.
+            video_frames (list): List of frame images.
+            player_detections (list): List of dictionaries, where each dictionary contains the player detections in a frame.
         
         Returns:
-            output_video_frames : Frames of the video, now annotated
-                                  with bounding boxes & IDs for Players.
-        
-        
+            output_video_frames (list): Frames of the video, now annotated with ellipses around players.
         """
-        raise NotImplementedError
-    
+        output_video_frames = []
+        
+        # Create an EllipseAnnotator object with custom colors
+        color_palette = ['#00ffff', '#800080'] # Cyan and Purple
+        ellipse_annotator = sv.EllipseAnnotator(color=sv.ColorPalette.from_hex(color_palette))
 
-
-
-
+        for frame, player_dict in zip(video_frames, player_detections):
+            # Make a copy of the original frame
+            
+            if player_dict:  # Check if there are any detections
+                # Collect all bounding boxes and IDs
+                xyxy_list = []
+                class_id_list = []
+                
+                for track_id, bbox in player_dict.items():
+                    xyxy_list.append(bbox)
+                    class_id_list.append(track_id)
+                
+                # Convert to numpy arrays
+                xyxy_array = np.array(xyxy_list)
+                class_id_array = np.array(class_id_list)
+                
+                # Create detections object with all players
+                detections = sv.Detections(
+                    xyxy=xyxy_array,
+                    class_id=class_id_array
+                )
+                
+                # Annotate the frame with ellipses
+                annotated_frame = ellipse_annotator.annotate(frame, detections)
+            
+            output_video_frames.append(annotated_frame)
+        
+        return output_video_frames
 
 
