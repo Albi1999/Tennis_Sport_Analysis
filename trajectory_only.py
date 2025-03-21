@@ -193,7 +193,7 @@ def main():
             ball_bounce_frames = [49, 75, 106, 142]
         if video_number == 101:
             # removed 169 because trace is just a single point ; bad for training
-            ball_bounce_frames = [20,50,77,106,138,197,230,273,301]
+            ball_bounce_frames = [20,50,77,106,138,197,230,270,301] # [20,50,77,106,138,168,197,230,270,301]
         if video_number == 102:
             ball_bounce_frames = [13,41,73,105,131,159,190,221,270,299,329,363,414]
         if video_number == 103:

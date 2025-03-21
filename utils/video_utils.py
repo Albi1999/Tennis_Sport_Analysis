@@ -83,6 +83,39 @@ def convert_mp4_to_mp3(mp4_file, mp3_file):
     video.close()
 
 
+def draw_frames_number(video_frames):
+    """
+    Draw the frame number on each frame of a video.
+    
+    Parameters:
+    video_frames (list): List of video frames
+    """
+    
+    # Iterate over each frame
+    for i, frame in enumerate(video_frames):
+        cv2.putText(frame, f"Frames: {i}", (20, 50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,144,30), 2)
+    
+    return video_frames
+
+
+def draw_debug_window(video_frames):
+    """
+    Draw a black rectangle at the top left corner of each frame.
+        
+    Parameters:
+    video_frames (list): List of video frames
+    """
+    # Iterate over each frame
+    for frame in video_frames:
+        # Draw a black rectangle at the top left corner of the frame with 
+        cv2.rectangle(frame, (5, 10), (370, 220), (10, 10, 10), -1)
+        
+    return video_frames
+
+    
+        
+
+
         
 
 

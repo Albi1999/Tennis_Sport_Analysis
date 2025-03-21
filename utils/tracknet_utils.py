@@ -798,12 +798,12 @@ def refine_audio(ball_shots_frames_audio, fps, audio_file):
 
 
 
-def draw_ball_hits(video_frames, hit_frames):
+def draw_racket_hits(video_frames, hit_frames):
     """ Draw the ball hits on the video frames """
     output_video_frames = []
     counter = 0
     for i,frame in enumerate(video_frames):
-        cv2.putText(frame, f"Racket Hits: {counter}", (10, 100), cv2.FONT_HERSHEY_DUPLEX , 1, (0,255,0), 2)
+        cv2.putText(frame, f"Racket Hits: {counter}", (20, 100), cv2.FONT_HERSHEY_DUPLEX , 1, (255,144,30), 2)
         if i in hit_frames:
             counter += 1
 

@@ -335,7 +335,70 @@ def filter_bounce_frames_for_player(ball_landing_frames, ball_detections, keypoi
     
 
 
-
-
+def draw_ball_landings(video_frames, ball_landing_frames, ground_truth_bounce, ball_detections, K=10):
+    """
+    Draws ball bounces on the video, keeping them visible for K consecutive frames:
+    - Predicted bounces in red
+    - Ground truth bounces in green
     
+    Args:
+        video_frames: List of video frames
+        ball_landing_frames: List of frames where the ball bounces (predictions)
+        ground_truth_bounce: List of frames where the ball bounces (ground truth)
+        ball_detections: Ball coordinates for each frame
+        K: Number of consecutive frames to display each bounce
+    
+    Returns:
+        List of video frames with bounces drawn
+    """
+    # Create a copy of the video frames
+    output_frames = video_frames.copy()
+    
+    # Prepare a dictionary for each frame, containing the bounces to be drawn
+    predicted_bounces_to_draw = {}  # {frame_idx: [bounce_idx1, bounce_idx2, ...]}
+    ground_truth_to_draw = {}       # {frame_idx: [bounce_idx1, bounce_idx2, ...]}
+    
+    # Populate the dictionary for predicted bounces
+    for bounce_idx in ball_landing_frames:
+        # For each bounce, add its index to the next K frames
+        for k in range(K):
+            frame_to_update = bounce_idx + k
+            if frame_to_update < len(output_frames):
+                if frame_to_update not in predicted_bounces_to_draw:
+                    predicted_bounces_to_draw[frame_to_update] = []
+                predicted_bounces_to_draw[frame_to_update].append(bounce_idx)
+    
+    # Populate the dictionary for ground truth bounces
+    for bounce_idx in ground_truth_bounce:
+        # For each bounce, add its index to the next K frames
+        for k in range(K):
+            frame_to_update = bounce_idx + k
+            if frame_to_update < len(output_frames):
+                if frame_to_update not in ground_truth_to_draw:
+                    ground_truth_to_draw[frame_to_update] = []
+                ground_truth_to_draw[frame_to_update].append(bounce_idx)
+    
+    # Iterate through each video frame
+    for idx, frame in enumerate(output_frames):
+        # Draw legend in the top left corner
+        cv2.putText(frame, "Bounce Ground Truth", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(frame, "Bounce Prediction", (20, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+  
+        # Draw ground truth bounces for this frame
+        if idx in ground_truth_to_draw:
+            for bounce_idx in ground_truth_to_draw[idx]:
+                if bounce_idx < len(ball_detections) and ball_detections[bounce_idx][0] is not None:
+                    x, y = int(ball_detections[bounce_idx][0]), int(ball_detections[bounce_idx][1])
+                    cv2.circle(frame, (x, y), radius=15, color=(0, 255, 0), thickness=3)
+                    cv2.putText(frame, f"n. {bounce_idx}", (x - 100, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Draw predicted bounces for this frame
+        if idx in predicted_bounces_to_draw:
+            for bounce_idx in predicted_bounces_to_draw[idx]:
+                if bounce_idx < len(ball_detections) and ball_detections[bounce_idx][0] is not None:
+                    x, y = int(ball_detections[bounce_idx][0]), int(ball_detections[bounce_idx][1])
+                    cv2.circle(frame, (x, y), radius=15, color=(0, 0, 255), thickness=3)
+                    cv2.putText(frame, f"n. {bounce_idx}", (x + 30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    
+    return output_frames
 

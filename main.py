@@ -3,7 +3,7 @@ from utils import (read_video,
                    refine_audio, 
                    write_track, 
                    get_ball_shot_frames_audio, 
-                   draw_ball_hits, 
+                   draw_racket_hits, 
                    euclidean_distance,
                    convert_pixel_distance_to_meters,
                    draw_player_stats,
@@ -12,7 +12,11 @@ from utils import (read_video,
                    detect_frames_TRACKNET,
                    create_player_stats_box_video,
                    cluster_series,
-                   filter_bounce_frames_for_player)
+                   filter_bounce_frames_for_player,
+                   draw_debug_window,
+                   draw_frames_number,
+                   draw_ball_landings,
+                   )
 from trackers import (PlayerTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
 from ball_landing import (BounceCNN, make_prediction, evaluation_transform)
@@ -40,13 +44,12 @@ def main():
     DRAW_MINI_COURT = False
     DRAW_STATS_BOX = False
 
-    # Check if GPU is available
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+    # Debugging Mode
+    DEBUG = True
 
     # Video to run inference on
     video_number = 101
-    ground_truth_bounce = [20,50,77,106,138,197,230,273,301]
+    ground_truth_bounce = [20,50,77,106,138,168,197,230,270,301]
     print(f"Running inference on video {video_number}")
 
     # Video Paths
@@ -59,6 +62,10 @@ def main():
         READ_STUBS = True
     else:
         READ_STUBS = False
+        
+    # Check if GPU is available
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
 
 
 
@@ -286,9 +293,6 @@ def main():
 
     # Draw Ball Detection
     output_frames = write_track(video_frames, ball_detections_tracknet)
-    
-    # Draw Ball Hits
-    output_frames = draw_ball_hits(output_frames, ball_shots_frames_audio)
 
     # Draw keypoints, according to the first frame
     all_keypoints = courtline_detector.detect_keypoints_for_all_frames(video_frames)
@@ -322,9 +326,12 @@ def main():
     if DRAW_STATS_BOX:
         output_frames = draw_player_stats(output_frames, player_stats_data_df)
 
-    # Draw frame number (top left corner)
-    for i, frame in enumerate(output_frames):
-        cv2.putText(frame, f"Frames: {i}", (10, 50), cv2.FONT_HERSHEY_DUPLEX, 1, (0,255,0), 2)
+    # Draw Frames Number, Racket Hits and Ball Landings for debugging purposes
+    if DEBUG:
+        output_frames = draw_debug_window(output_frames)
+        output_frames = draw_frames_number(output_frames)
+        output_frames = draw_racket_hits(output_frames, ball_shots_frames)
+        output_frames = draw_ball_landings(output_frames, ball_landing_frames, ground_truth_bounce, ball_detections_tracknet)
 
     # Save video
     save_video(output_frames, output_video_path, fps)
