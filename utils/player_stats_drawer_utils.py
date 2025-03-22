@@ -4,12 +4,11 @@ import cv2
 def draw_player_stats(output_video_frames, player_stats):
     """
     Draws the player statistics on the output video frames.
-    This is the original function to create the player stats box in the output video.
 
     :param:
         output_video_frames: List of frames of the output video.
         player_stats: DataFrame containing player statistics.
-    :return: 
+    :return:
         List of frames with player statistics drawn on them.
     """
 
@@ -82,8 +81,8 @@ def create_player_stats_box_video(player_stats, video_number, fps=30):
         Path to the saved stats box video.
     """
 
-    width = 400  # Increased for better text spacing
-    height = 250  # Increased height to improve spacing
+    width = 400
+    height = 250
     output_path = f"output/animations/player_stats_box{video_number}.mp4"
 
     # Improved font scales for better clarity

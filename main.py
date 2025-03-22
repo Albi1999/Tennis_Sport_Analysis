@@ -49,7 +49,7 @@ def main():
 
     # Video to run inference on
     video_number = 101
-    ground_truth_bounce = [20,50,77,106,138,168,197,230,270,301]
+    # ground_truth_bounce = [20,50,77,106,138,168,197,230,270,301]
     print(f"Running inference on video {video_number}")
 
     # Video Paths
@@ -117,6 +117,7 @@ def main():
     ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
     print("Ball Shots from Audio : ", ball_shots_frames_audio)
     print("Audio Refinment :", ball_shots_frames)
+    ball_shots_frames_stats = ball_shots_frames.copy()
 
     # First, create a completely black video with same dimensions & fps of actual video 
     frame_count = len(video_frames)
@@ -153,7 +154,6 @@ def main():
     ball_landing_frames = cluster_series(img_idxs_bounce)
     print(f"Predicted V Shaped Frames : {img_idxs_bounce}")
     print(f"Predicted Bounce Frames : {ball_landing_frames}")
-    print(f"Ground Truth Bounce Frames : {ground_truth_bounce[1:]}")
     
     # TODO: Create a function to select ONLY the ball landing frames in the upper part of the court
     player_balls_frames = filter_bounce_frames_for_player(ball_landing_frames, 
@@ -163,6 +163,143 @@ def main():
     print(f"{SELECTED_PLAYER} Player Ball Frames : {player_balls_frames}")
     
     
+
+    ######## GROUND TRUTH ########
+    
+    if DEBUG:
+        # Fixing some mistakes in the ball shots frames
+
+        if video_number == 101:
+            ground_truth_bounce = [20,50,77,106,138,197,230,270,301]
+            ball_shots_frames_stats.remove(19)
+            ball_shots_frames_stats.remove(69)
+            ball_shots_frames_stats.remove(123)
+            ball_shots_frames_stats.remove(192)
+            ball_shots_frames_stats.remove(253)
+            ball_shots_frames_stats.remove(296)
+
+        if video_number == 102:
+            ground_truth_bounce = [13,41,73,105,131,159,190,221,270,299,329,363,414]
+
+        if video_number == 103:
+            ground_truth_bounce = [23,66,97]
+
+        if video_number == 105:
+            ground_truth_bounce = [48,None,115,146,208,268]
+            ball_shots_frames_stats.append(186)
+
+        if video_number == 107:
+            ground_truth_bounce = [69,107,133,172,202,279]
+            ball_shots_frames_stats.remove(269)
+            ball_shots_frames_stats.remove(203)
+
+        if video_number == 108:
+            ground_truth_bounce = [29, 78, 104]
+            ball_shots_frames_stats.append(37)
+            ball_shots_frames_stats.remove(42)
+
+        if video_number == 109:
+            ground_truth_bounce = [30, 55, 86, 111, 144, 169, 203, 244]
+            ball_shots_frames_stats.remove(47)
+            ball_shots_frames_stats.remove(61)
+            ball_shots_frames_stats.append(65)
+            ball_shots_frames_stats.remove(116)
+            ball_shots_frames_stats.append(124)
+            ball_shots_frames_stats.remove(148)
+            ball_shots_frames_stats.append(153)
+            ball_shots_frames_stats.remove(171)
+            ball_shots_frames_stats.append(177)
+            ball_shots_frames_stats.append(211)
+
+        if video_number == 110:
+            ground_truth_bounce = [23, 60, 94, 123, 162, 200, 244, 273, 305, 334, 363, 390]
+            ball_shots_frames_stats.remove(90)
+            ball_shots_frames_stats.append(104)
+            ball_shots_frames_stats.remove(112)
+            ball_shots_frames_stats.remove(132)
+            ball_shots_frames_stats.append(136)
+            ball_shots_frames_stats.remove(169)
+            ball_shots_frames_stats.append(174)
+            ball_shots_frames_stats.remove(203)
+            ball_shots_frames_stats.append(213)
+            ball_shots_frames_stats.remove(229)
+            ball_shots_frames_stats.remove(243)
+            ball_shots_frames_stats.append(252)
+            ball_shots_frames_stats.remove(270)
+            ball_shots_frames_stats.append(282)
+            ball_shots_frames_stats.remove(299)
+            ball_shots_frames_stats.append(310)
+            ball_shots_frames_stats.remove(327)
+            ball_shots_frames_stats.append(340)
+            ball_shots_frames_stats.remove(359)
+            ball_shots_frames_stats.append(372)
+            ball_shots_frames_stats.remove(385)
+            ball_shots_frames_stats.append(400)
+            ball_shots_frames_stats.remove(414)
+        
+        if video_number == 111:
+            ground_truth_bounce = [43, 76, 114, 144, 171, 207, 236]
+            ball_shots_frames_stats.remove(274)
+        
+        if video_number == 112:
+            ground_truth_bounce = [45, 83, 109, 150, 178, 224, 268, 298, 330, 363, 405, 438]
+            ball_shots_frames_stats.remove(100)
+            ball_shots_frames_stats.append(158)
+            ball_shots_frames_stats.remove(167)
+            ball_shots_frames_stats.append(193)
+            ball_shots_frames_stats.remove(317)
+            ball_shots_frames_stats.append(445)
+            ball_shots_frames_stats.remove(466)
+        
+        if video_number == 113:
+            ground_truth_bounce = [26, 67, 96, 133, 148]
+            ball_shots_frames_stats.append(33)
+            ball_shots_frames_stats.append(76)
+            ball_shots_frames_stats.remove(144)
+        
+        if video_number == 114:
+            ground_truth_bounce = [19, 58, 83, 123, 152, 228]
+            ball_shots_frames_stats.remove(65)
+            ball_shots_frames_stats.append(69)
+            ball_shots_frames_stats.remove(153)
+            ball_shots_frames_stats.remove(219)
+            ball_shots_frames_stats.remove(249)
+
+        if video_number == 115:
+            ground_truth_bounce = [17, 50, 75, 120, 150, 183, 213, 242]
+            ball_shots_frames_stats.remove(44)
+            ball_shots_frames_stats.append(156)
+            ball_shots_frames_stats.remove(169)
+        
+        if video_number == 116:
+            ground_truth_bounce = [12, 51, 81]
+            ball_shots_frames_stats.remove(7)
+            ball_shots_frames_stats.remove(16)
+            ball_shots_frames_stats.remove(35)
+            ball_shots_frames_stats.remove(53)
+            ball_shots_frames_stats.remove(74)
+            ball_shots_frames_stats.remove(81)
+            ball_shots_frames_stats.remove(95)
+        
+        if video_number == 117:
+            ground_truth_bounce = [14, 45, 74, 104, 138, 165, 196]
+            ball_shots_frames_stats.remove(98)
+        
+        if video_number == 118:
+            ground_truth_bounce = [38, 69, 95, 145, 171, 208, 237, 281, 309]
+            ball_shots_frames_stats.append(26)
+            ball_shots_frames_stats.append(45)
+            ball_shots_frames_stats.append(74)
+            ball_shots_frames_stats.remove(95)
+            ball_shots_frames_stats.append(109)
+            ball_shots_frames_stats.remove(225)
+            ball_shots_frames_stats.remove(321)
+
+        ball_shots_frames_stats = sorted(ball_shots_frames_stats)
+
+    # Print the ball shots frames to check what we have as input for the stats
+    print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
+    print(f"Ground Truth Bounce Frames : {ground_truth_bounce[1:]}")
 
     ######## MATCH STATS ########
 
@@ -185,9 +322,9 @@ def main():
     } ]
 
     # Loop over all ball shots except the last one since it doesn't have an answer shot.
-    for ball_shot_ind in range(len(ball_shots_frames)-1):
-        start_frame = ball_shots_frames[ball_shot_ind]               # Starting frame of the ball shot
-        end_frame = ball_shots_frames[ball_shot_ind+1]               # Ending frame of the ball shot
+    for ball_shot_ind in range(len(ball_shots_frames_stats)-1):
+        start_frame = ball_shots_frames_stats[ball_shot_ind]               # Starting frame of the ball shot
+        end_frame = ball_shots_frames_stats[ball_shot_ind+1]               # Ending frame of the ball shot
         ball_shot_time_in_seconds = (end_frame - start_frame) / fps  # Time taken by the ball to travel from the player to the opponent
 
         # Get distance covered by the ball
@@ -206,14 +343,20 @@ def main():
                                                                                                     ball_mini_court_detections[start_frame][1]))
         
         # Opponent player's speed
-        opponent_player_id = 1 if player_shot_ball == 2 else 2 # Opponent player's ID
-        distance_covered_by_opponent_pixels = euclidean_distance(player_mini_court_detections[start_frame][opponent_player_id],
-                                                                    player_mini_court_detections[end_frame][opponent_player_id]) 
-        distance_covered_by_opponent_meters = convert_pixel_distance_to_meters(distance_covered_by_opponent_pixels, 
-                                                                           info.DOUBLE_LINE_WIDTH,
-                                                                           mini_court.get_width_of_mini_court()) # Distance covered by the opponent player in meters
+        opponent_player_id = 1 if player_shot_ball == 2 else 2  # Opponent player's ID
 
-        opponent_speed = distance_covered_by_opponent_meters / ball_shot_time_in_seconds * 3.6 # 3.6 to convert m/s to km/h
+        # Check if opponent player was detected in both frames
+        if opponent_player_id in player_mini_court_detections[start_frame] and opponent_player_id in player_mini_court_detections[end_frame]:
+            distance_covered_by_opponent_pixels = euclidean_distance(player_mini_court_detections[start_frame][opponent_player_id],
+                                                                    player_mini_court_detections[end_frame][opponent_player_id]) 
+            distance_covered_by_opponent_meters = convert_pixel_distance_to_meters(distance_covered_by_opponent_pixels, 
+                                                                                info.DOUBLE_LINE_WIDTH,
+                                                                                mini_court.get_width_of_mini_court())
+            opponent_speed = distance_covered_by_opponent_meters / ball_shot_time_in_seconds * 3.6  # 3.6 to convert m/s to km/h
+        else:
+            # Handle missing player detection
+            distance_covered_by_opponent_meters = 0
+            opponent_speed = 0
 
         # Update player stats
         current_player_stats = deepcopy(player_stats_data[-1]) # Copy of previous stats
@@ -330,7 +473,7 @@ def main():
     if DEBUG:
         output_frames = draw_debug_window(output_frames)
         output_frames = draw_frames_number(output_frames)
-        output_frames = draw_racket_hits(output_frames, ball_shots_frames)
+        output_frames = draw_racket_hits(output_frames, ball_shots_frames_stats)
         output_frames = draw_ball_landings(output_frames, ball_landing_frames, ground_truth_bounce, ball_detections_tracknet)
 
     # Save video
