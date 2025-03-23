@@ -16,6 +16,7 @@ from utils import (read_video,
                    draw_debug_window,
                    draw_frames_number,
                    draw_ball_landings,
+                   map_court_position_to_player_id
                    )
 from trackers import (PlayerTracker, BallTrackerNetTRACE)
 from mini_court import MiniCourt
@@ -42,7 +43,7 @@ def main():
     
     # Draw Options
     DRAW_MINI_COURT = False
-    DRAW_STATS_BOX = False
+    DRAW_STATS_BOX = True
 
     # Debugging Mode
     DEBUG = True
@@ -102,7 +103,13 @@ def main():
 
     # Filter players (such that only the two actual players are tracked)
     player_detections, chosen_players_ids = player_tracker.choose_and_filter_players(refined_keypoints, player_detections)
-            
+
+    # Map player positions to player IDs
+    player_position_to_id = map_court_position_to_player_id(refined_keypoints, player_detections)
+    print(f"Player mapping: Upper is player_{player_position_to_id.get('Upper')}, Lower is player_{player_position_to_id.get('Lower')}")
+    print(f"Selected Player : {SELECTED_PLAYER}")
+    print(f"Selected Player ID : {player_position_to_id.get(SELECTED_PLAYER)}")
+
     # Initialize Mini Court
     mini_court = MiniCourt(video_frames[0])
 
@@ -422,8 +429,10 @@ def main():
     print(f"Score Heatmap animation saved to: {score_heatmap_path}")
     
     # Create player stats box video
-    stats_box_path = create_player_stats_box_video(player_stats_data_df, video_number)
-    print(f"Player Stats Box saved to: {stats_box_path}")
+    stats_box_video_path = create_player_stats_box_video(player_stats_data_df, video_number, fps=fps,
+                                                            selected_player=SELECTED_PLAYER,
+                                                            player_mapping=player_position_to_id)
+    print(f"Player Stats Box saved to: {stats_box_video_path}")
 
 
 
@@ -467,7 +476,9 @@ def main():
 
     # Draw player stats box
     if DRAW_STATS_BOX:
-        output_frames = draw_player_stats(output_frames, player_stats_data_df)
+        output_frames = draw_player_stats(output_frames, player_stats_data_df, 
+                                            selected_player=SELECTED_PLAYER,
+                                            player_mapping=player_position_to_id)
 
     # Draw Frames Number, Racket Hits and Ball Landings for debugging purposes
     if DEBUG:
