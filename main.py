@@ -317,17 +317,30 @@ def main():
         'player_1_number_of_shots': 0,
         'player_1_total_shot_speed': 0,
         'player_1_last_shot_speed': 0,
+        'player_1_min_shot_speed': float('inf'),  # Initialize with infinity
+        'player_1_max_shot_speed': 0,             # Initialize with 0
         'player_1_total_player_speed': 0,
         'player_1_last_player_speed': 0,
+        'player_1_hits_counter': 0,
+        'player_1_distance_covered': 0,
+        'player_1_score_probability': 0,
 
         #player 2 stats
         'player_2_number_of_shots': 0,
         'player_2_total_shot_speed': 0,
         'player_2_last_shot_speed': 0,
+        'player_2_min_shot_speed': float('inf'),  # Initialize with infinity
+        'player_2_max_shot_speed': 0,             # Initialize with 0
         'player_2_total_player_speed': 0,
         'player_2_last_player_speed': 0,
+        'player_2_hits_counter': 0,
+        'player_2_distance_covered': 0,
+        'player_2_score_probability': 0,
     } ]
 
+    # Track player positions for calculating total distance
+    player_positions_history = {1: [], 2: []}
+    
     # Loop over all ball shots except the last one since it doesn't have an answer shot.
     for ball_shot_ind in range(len(ball_shots_frames_stats)-1):
         start_frame = ball_shots_frames_stats[ball_shot_ind]               # Starting frame of the ball shot
@@ -352,6 +365,27 @@ def main():
         # Opponent player's speed
         opponent_player_id = 1 if player_shot_ball == 2 else 2  # Opponent player's ID
 
+        # Track player distances between frames
+        for player_id in [1, 2]:
+            # Calculate total distance covered by this player between shots
+            player_distance = 0
+            for frame in range(start_frame, end_frame):
+                if (player_id in player_mini_court_detections[frame] and 
+                    player_id in player_mini_court_detections[frame+1]):
+                    
+                    dist_pixels = euclidean_distance(
+                        player_mini_court_detections[frame][player_id],
+                        player_mini_court_detections[frame+1][player_id]
+                    )
+                    dist_meters = convert_pixel_distance_to_meters(
+                        dist_pixels,
+                        info.DOUBLE_LINE_WIDTH,
+                        mini_court.get_width_of_mini_court()
+                    )
+                    player_distance += dist_meters
+
+            player_positions_history[player_id].append(player_distance)
+
         # Check if opponent player was detected in both frames
         if opponent_player_id in player_mini_court_detections[start_frame] and opponent_player_id in player_mini_court_detections[end_frame]:
             distance_covered_by_opponent_pixels = euclidean_distance(player_mini_court_detections[start_frame][opponent_player_id],
@@ -365,18 +399,44 @@ def main():
             distance_covered_by_opponent_meters = 0
             opponent_speed = 0
 
+        # Calculate score probability based on shot speed and opponent position
+        # (Simple model: faster shots with opponent far from ball landing position have higher probability)
+        shot_probability = min(95, 40 + (speed_of_ball_shot / 3))  # Base probability on shot speed
+        
         # Update player stats
         current_player_stats = deepcopy(player_stats_data[-1]) # Copy of previous stats
         current_player_stats['frame_num'] = start_frame
         
         # Player who shot the ball stats
         current_player_stats[f'player_{player_shot_ball}_number_of_shots'] += 1
+        current_player_stats[f'player_{player_shot_ball}_hits_counter'] += 1 # Increment hits counter
         current_player_stats[f'player_{player_shot_ball}_total_shot_speed'] += speed_of_ball_shot
         current_player_stats[f'player_{player_shot_ball}_last_shot_speed'] = speed_of_ball_shot
+        current_player_stats[f'player_{player_shot_ball}_score_probability'] = shot_probability
+        
+        # Update min and max shot speeds
+        current_player_stats[f'player_{player_shot_ball}_min_shot_speed'] = min(
+            current_player_stats[f'player_{player_shot_ball}_min_shot_speed'], 
+            speed_of_ball_shot
+        )
+        current_player_stats[f'player_{player_shot_ball}_max_shot_speed'] = max(
+            current_player_stats[f'player_{player_shot_ball}_max_shot_speed'], 
+            speed_of_ball_shot
+        )
+        
+        # Update distance covered
+        if player_positions_history[player_shot_ball]:
+            player_distance = player_positions_history[player_shot_ball][-1]
+            current_player_stats[f'player_{player_shot_ball}_distance_covered'] += player_distance
 
         # Opponent player stats
         current_player_stats[f'player_{opponent_player_id}_total_player_speed'] += opponent_speed
         current_player_stats[f'player_{opponent_player_id}_last_player_speed'] = opponent_speed
+        
+        # Update opponent distance covered
+        if player_positions_history[opponent_player_id]:
+            opponent_distance = player_positions_history[opponent_player_id][-1]
+            current_player_stats[f'player_{opponent_player_id}_distance_covered'] += opponent_distance
 
         player_stats_data.append(current_player_stats) # Append the updated stats
     

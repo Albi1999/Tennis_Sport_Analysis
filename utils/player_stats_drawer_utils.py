@@ -28,11 +28,11 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
         # Add player stats to the frame
         shapes = np.zeros_like(frame, np.uint8)
         # Dimensions of the rectangle
-        width = 350
-        height = 230
+        width = 330
+        height = 380 if not show_both_players else 270  # Increased height for additional stats
         # Position of the rectangle
         start_x = frame.shape[1] - 400
-        start_y = frame.shape[0] - 280
+        start_y = frame.shape[0] - (height + 50)
         end_x = start_x + width
         end_y = start_y + height
         
@@ -50,7 +50,7 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
         else:
             # Only show selected player
             text = f"{selected_player} Player Stats"
-            cv2.putText(frame, text, (start_x+80, start_y+30), 
+            cv2.putText(frame, text, (start_x+50, start_y+30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
             
         # Add stats rows
@@ -86,16 +86,40 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             text = f"{row['player_1_average_player_speed']:.1f} km/h    {row['player_2_average_player_speed']:.1f} km/h"
             cv2.putText(frame, text, (start_x+130, start_y+200), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+            
         else:
             # Only show selected player stats with larger font and cleaner layout
             y_offset = start_y + 80
-            line_spacing = 40
+            line_spacing = 35
             
             # Shot speed
             text = "Shot Speed"
             cv2.putText(frame, text, (start_x+10, y_offset), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             text = f"{row[f'player_{selected_player_id}_last_shot_speed']:.1f} km/h"
+            cv2.putText(frame, text, (start_x+180, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            
+            # Min shot speed
+            y_offset += line_spacing
+            text = "Min Shot Speed"
+            cv2.putText(frame, text, (start_x+10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            # Handle case where no shots were made
+            min_shot_speed = row[f'player_{selected_player_id}_min_shot_speed']
+            if min_shot_speed == float('inf'):
+                text = "N/A"
+            else:
+                text = f"{min_shot_speed:.1f} km/h"
+            cv2.putText(frame, text, (start_x+180, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            
+            # Max shot speed
+            y_offset += line_spacing
+            text = "Max Shot Speed"
+            cv2.putText(frame, text, (start_x+10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_max_shot_speed']:.1f} km/h"
             cv2.putText(frame, text, (start_x+180, y_offset), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
@@ -126,6 +150,33 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             cv2.putText(frame, text, (start_x+180, y_offset), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         
+            # Hits counter
+            y_offset += line_spacing
+            text = "Hits Counter"
+            cv2.putText(frame, text, (start_x+10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            text = f"{int(row[f'player_{selected_player_id}_hits_counter'])}"
+            cv2.putText(frame, text, (start_x+180, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            
+            # Distance covered
+            y_offset += line_spacing
+            text = "Distance Covered"
+            cv2.putText(frame, text, (start_x+10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_distance_covered']:.1f} m"
+            cv2.putText(frame, text, (start_x+180, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            
+            # Score probability
+            y_offset += line_spacing
+            text = "Score Probability"
+            cv2.putText(frame, text, (start_x+10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_score_probability']:.1f}%"
+            cv2.putText(frame, text, (start_x+180, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
         output_video_frames[index] = frame
     
     return output_video_frames
@@ -152,8 +203,8 @@ def create_player_stats_box_video(player_stats, video_number, fps=30, selected_p
     if not show_both_players and selected_player in player_mapping:
         selected_player_id = player_mapping[selected_player]
     
-    width = 400
-    height = 250
+    width = 380
+    height = 380 if not show_both_players else 270
     output_path = f"output/animations/player_stats_box{video_number}.mp4"
     
     # Initialize video writer
@@ -218,13 +269,36 @@ def create_player_stats_box_video(player_stats, video_number, fps=30, selected_p
             
             # Stats with larger font and better spacing
             y_offset = 80
-            line_spacing = 40
+            line_spacing = 35
             
             # Shot speed
             text = "Shot Speed"
             cv2.putText(stats_box_frame, text, (20, y_offset), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
             text = f"{row[f'player_{selected_player_id}_last_shot_speed']:.1f} km/h"
+            cv2.putText(stats_box_frame, text, (width//2, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Min shot speed
+            y_offset += line_spacing
+            text = "Min Shot Speed"
+            cv2.putText(stats_box_frame, text, (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            # Handle case where no shots were made
+            min_shot_speed = row[f'player_{selected_player_id}_min_shot_speed']
+            if min_shot_speed == float('inf'):
+                text = "N/A"
+            else:
+                text = f"{min_shot_speed:.1f} km/h"
+            cv2.putText(stats_box_frame, text, (width//2, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Max shot speed
+            y_offset += line_spacing
+            text = "Max Shot Speed"
+            cv2.putText(stats_box_frame, text, (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_max_shot_speed']:.1f} km/h"
             cv2.putText(stats_box_frame, text, (width//2, y_offset), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
@@ -252,6 +326,33 @@ def create_player_stats_box_video(player_stats, video_number, fps=30, selected_p
             cv2.putText(stats_box_frame, text, (20, y_offset), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
             text = f"{row[f'player_{selected_player_id}_average_player_speed']:.1f} km/h"
+            cv2.putText(stats_box_frame, text, (width//2, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Hits counter
+            y_offset += line_spacing
+            text = "Hits Counter"
+            cv2.putText(stats_box_frame, text, (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            text = f"{int(row[f'player_{selected_player_id}_hits_counter'])}"
+            cv2.putText(stats_box_frame, text, (width//2, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Distance covered
+            y_offset += line_spacing
+            text = "Distance Covered"
+            cv2.putText(stats_box_frame, text, (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_distance_covered']:.1f} m"
+            cv2.putText(stats_box_frame, text, (width//2, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Score probability
+            y_offset += line_spacing
+            text = "Score Probability"
+            cv2.putText(stats_box_frame, text, (20, y_offset), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_score_probability']:.1f}%"
             cv2.putText(stats_box_frame, text, (width//2, y_offset), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
