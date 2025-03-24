@@ -33,7 +33,7 @@ import os
 import pickle
 import numpy as np
 
-
+# TODO: Clean the code and remove the unnecessary parts
 
 def main():
 
@@ -48,7 +48,7 @@ def main():
     DRAW_STATS_BOX = True
 
     # Debugging Mode
-    DEBUG = True
+    DEBUG = False
 
     # Video to run inference on
     # Note : for video 116, change in mini_court.convert_bounding_boxes_to_mini_court_coordinates(...) ball_detections_YOLO to ball_detections
@@ -216,6 +216,7 @@ def main():
 
     ######## GROUND TRUTH ########
     
+    # TODO: Remove the too bad videos from this statement (?)
     if DEBUG:
         # Fixing some mistakes in the ball shots frames
 
@@ -240,8 +241,6 @@ def main():
 
         if video_number == 108:
             ground_truth_bounce = [29, 78, 104]
-            ball_shots_frames_stats.append(37)
-            ball_shots_frames_stats.remove(42)
 
         if video_number == 109:
             ground_truth_bounce = [30, 55, 86, 111, 144, 169, 203, 244]
@@ -335,9 +334,9 @@ def main():
 
         ball_shots_frames_stats = sorted(ball_shots_frames_stats)
 
-    # Print the ball shots frames to check what we have as input for the stats
-    print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
-    print(f"Ground Truth Bounce Frames : {ground_truth_bounce[1:]}")
+        # Print the ball shots frames to check what we have as input for the stats
+        print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
+        print(f"Ground Truth Bounce Frames : {ground_truth_bounce[1:]}")
 
     ######## MATCH STATS ########
 
@@ -348,8 +347,8 @@ def main():
         'player_1_number_of_shots': 0,
         'player_1_total_shot_speed': 0,
         'player_1_last_shot_speed': 0,
-        'player_1_min_shot_speed': float('inf'),  # Initialize with infinity
-        'player_1_max_shot_speed': 0,             # Initialize with 0
+        'player_1_min_shot_speed': float('inf'),
+        'player_1_max_shot_speed': 0,
         'player_1_total_player_speed': 0,
         'player_1_last_player_speed': 0,
         'player_1_hits_counter': 0,
@@ -360,8 +359,8 @@ def main():
         'player_2_number_of_shots': 0,
         'player_2_total_shot_speed': 0,
         'player_2_last_shot_speed': 0,
-        'player_2_min_shot_speed': float('inf'),  # Initialize with infinity
-        'player_2_max_shot_speed': 0,             # Initialize with 0
+        'player_2_min_shot_speed': float('inf'),
+        'player_2_max_shot_speed': 0,
         'player_2_total_player_speed': 0,
         'player_2_last_player_speed': 0,
         'player_2_hits_counter': 0,
@@ -376,7 +375,7 @@ def main():
     for ball_shot_ind in range(len(ball_shots_frames_stats)-1):
         start_frame = ball_shots_frames_stats[ball_shot_ind]               # Starting frame of the ball shot
         end_frame = ball_shots_frames_stats[ball_shot_ind+1]               # Ending frame of the ball shot
-        ball_shot_time_in_seconds = (end_frame - start_frame) / fps  # Time taken by the ball to travel from the player to the opponent
+        ball_shot_time_in_seconds = (end_frame - start_frame) / fps        # Time taken by the ball to travel from the player to the opponent
 
         # Get distance covered by the ball
         distance_covered_by_ball_pixels = euclidean_distance(ball_mini_court_detections[start_frame][1],
@@ -433,7 +432,8 @@ def main():
         # Calculate score probability based on shot speed and opponent position
         # (Simple model: faster shots with opponent far from ball landing position have higher probability)
         shot_probability = min(95, 40 + (speed_of_ball_shot / 3))  # Base probability on shot speed
-        
+        # TODO: Use the correct shot probability once it's ready
+
         # Update player stats
         current_player_stats = deepcopy(player_stats_data[-1]) # Copy of previous stats
         current_player_stats['frame_num'] = start_frame
@@ -446,10 +446,12 @@ def main():
         current_player_stats[f'player_{player_shot_ball}_score_probability'] = shot_probability
         
         # Update min and max shot speeds
+        # Min
         current_player_stats[f'player_{player_shot_ball}_min_shot_speed'] = min(
             current_player_stats[f'player_{player_shot_ball}_min_shot_speed'], 
             speed_of_ball_shot
         )
+        # Max
         current_player_stats[f'player_{player_shot_ball}_max_shot_speed'] = max(
             current_player_stats[f'player_{player_shot_ball}_max_shot_speed'], 
             speed_of_ball_shot
@@ -469,7 +471,7 @@ def main():
             opponent_distance = player_positions_history[opponent_player_id][-1]
             current_player_stats[f'player_{opponent_player_id}_distance_covered'] += opponent_distance
 
-        player_stats_data.append(current_player_stats) # Append the updated stats
+        player_stats_data.append(current_player_stats)
     
     # Convert player stats data to a DataFrame
     player_stats_data_df = pd.DataFrame(player_stats_data)
@@ -512,17 +514,18 @@ def main():
 
     # Create score heatmap (combination of player and ball heatmaps)
     score_heatmap_path = mini_court.create_scoring_heatmap_animation(
-    player_mini_court_detections, 
-    ball_mini_court_detections, 
-    ball_landing_frames,
-    output_path=f"output/animations/scoring_heatmap_animation{video_number}.mp4", 
-    color_map=cv2.COLORMAP_HOT)
+        player_mini_court_detections, 
+        ball_mini_court_detections, 
+        ball_landing_frames,
+        output_path=f"output/animations/scoring_heatmap_animation{video_number}.mp4", 
+        color_map=cv2.COLORMAP_HOT)
     print(f"Score Heatmap animation saved to: {score_heatmap_path}")
     
     # Create player stats box video
-    stats_box_video_path = create_player_stats_box_video(player_stats_data_df, video_number, fps=fps,
-                                                            selected_player=SELECTED_PLAYER,
-                                                            player_mapping=player_position_to_id)
+    stats_box_video_path = create_player_stats_box_video(
+        player_stats_data_df, video_number, fps=fps,
+        selected_player=SELECTED_PLAYER,
+        player_mapping=player_position_to_id)
     print(f"Player Stats Box saved to: {stats_box_video_path}")
 
 
