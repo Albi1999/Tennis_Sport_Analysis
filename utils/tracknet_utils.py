@@ -273,11 +273,14 @@ def detect_frames_TRACKNET(video_frames, video_number, tracker, video_width, vid
 
     
 
-def get_ball_shot_frames_visual(ball_positions, fps):#, area):
+def get_ball_shot_frames_visual(ball_positions,fps, mode = 'tracknet'):#, area):
     """Based on change of direction in the mini court coordinates"""
 
-
-  #  ball_positions = [x.get(1,[]) for x in ball_positions]
+    if mode == 'yolo':
+        for dict_item in ball_positions:
+            for key, bbox in dict_item.items():
+                dict_item[key] = get_center_of_bbox(bbox)
+        ball_positions = [x.get(1,[]) for x in ball_positions]
     df_ball_positions = pd.DataFrame(ball_positions,columns=['x','y'])
    # df_ball_positions = df_ball_positions.iloc[area[0]:area[1]]
     # Create a rolling window for the y positions
@@ -352,7 +355,7 @@ def get_ball_shot_frames_visual(ball_positions, fps):#, area):
 
 
 
-def get_ball_shot_frames_audio(audio_file, fps, plot=False):
+def get_ball_shot_frames_audio(audio_file, fps, height=0.01, distance_c = 0.25, prominence=0.006, plot=False):
     # Load the audio file
     y, sr = librosa.load(audio_file, sr=None)
     
@@ -373,9 +376,9 @@ def get_ball_shot_frames_audio(audio_file, fps, plot=False):
     # Find peaks in the envelope
     # Lower height threshold to catch more peaks
     peaks, _ = find_peaks(y_envelope, 
-                        height=0.01,  # Lower threshold to catch more peaks
-                        distance=int(0.25 * sr),  # Minimum distance between peaks 
-                        prominence=0.006)  # Find all distinct peaks 
+                        height=height,  # Lower threshold to catch more peaks
+                        distance=int(distance_c * sr),  # Minimum distance between peaks 
+                        prominence=prominence)  # Find all distinct peaks 
     
     # Convert peak positions to time (seconds)
     hit_times = peaks / sr
@@ -476,8 +479,11 @@ def get_ball_shot_frames_audio_refinement(audio_file, fps, frames_start=None, fr
 
 import bisect
 
-def find_closest_matches(array_a, array_b):
-    """ Use binary search to find closest fitting elements in two arrays"""
+def find_closest_matches(array_a, array_b, threshold):
+    """
+    Find all elements in array_b that are within a given threshold distance
+    of each element in array_a. Returns in the same format as the original function.
+    """
     # Sort array_b first
     sorted_b = sorted(array_b)
     matches = []
@@ -486,19 +492,31 @@ def find_closest_matches(array_a, array_b):
         # Find insertion point
         pos = bisect.bisect_left(sorted_b, a)
         
-        # Check boundary cases
-        if pos == 0:
-            closest_b = sorted_b[0]
-        elif pos == len(sorted_b):
-            closest_b = sorted_b[-1]
-        else:
-            # Compare the two neighboring elements
-            if abs(a - sorted_b[pos-1]) <= abs(a - sorted_b[pos]):
-                closest_b = sorted_b[pos-1]
-            else:
-                closest_b = sorted_b[pos]
+        # Check elements to the left (smaller values)
+        left_idx = pos - 1
+        while left_idx >= 0 and a - sorted_b[left_idx] <= threshold:
+            matches.append((a, sorted_b[left_idx], abs(a - sorted_b[left_idx])))
+            left_idx -= 1
         
-        matches.append((a, closest_b, abs(a - closest_b)))
+        # Check elements to the right (larger values)
+        right_idx = pos
+        while right_idx < len(sorted_b) and sorted_b[right_idx] - a <= threshold:
+            matches.append((a, sorted_b[right_idx], abs(a - sorted_b[right_idx])))
+            right_idx += 1
+        
+        # If no matches were found within threshold, add the closest one
+        if left_idx + 1 == pos and right_idx == pos:
+            if pos == 0:
+                closest_b = sorted_b[0]
+            elif pos == len(sorted_b):
+                closest_b = sorted_b[-1]
+            else:
+                # Compare the two neighboring elements
+                if abs(a - sorted_b[pos-1]) <= abs(a - sorted_b[pos]):
+                    closest_b = sorted_b[pos-1]
+                else:
+                    closest_b = sorted_b[pos]
+            matches.append((a, closest_b, abs(a - closest_b)))
     
     return matches
 
@@ -538,7 +556,7 @@ def cluster_court_positions(hits):
     return clusters
 
 
-def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps, player_boxes, ball_detections, keypoints, max_distance_param = 12, adjustment = 150, MINI_COURT = False, net_y = 450, CLUSTERING = False):
+def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps, player_boxes, ball_detections, keypoints, max_distance_param = 10, adjustment = 150, MINI_COURT = False, net_y = 450, CLUSTERING = False):
     """
     Idea is that audio will detect every little peak in audio and therefore also a lot of wrong
     information (shoe sounds, players moaning, crowd screaming etc.). We try to refine that by
@@ -551,11 +569,13 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
     to make the racket hit detection even more robust.
 
 
+
     adjustment is used to adjust for the fact that the ball is in the air and such the 
     keypoint coordinates are not directly perfect.
 
     max_distance_param would probably need video-to-video tuning.
     """
+    max_distance_param = 0.5 * fps 
     if MINI_COURT == True:
         final_racket_hits = []
 
@@ -581,30 +601,35 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
 
 
         # Calculate the net's y-coordinate based on the keypoint found at the net
-        net_y = keypoints[21]
-        matches = find_closest_matches(ball_shots_frames_visual, ball_shots_frames_audio)
+        # since we use the mini court coordinates, one single keypoint is enough for us
+        net_y = (keypoints[1] + keypoints[5]) // 2
+        matches = find_closest_matches(ball_shots_frames_visual, ball_shots_frames_audio, threshold= max_distance_param)
 
         for elem in matches:
             # Only add the ones that are actually close to one another
             if elem[2] <= max_distance_param:
                 
-                # And also check in which court side we are
                 y_coord_hit_frame = ball_detections[elem[1]][1][1]
+                change = False
+                # if we have no track for the mapping to the audio based shot, use the visual one
+                if y_coord_hit_frame == None:
+                    change = True
+                    y_coord_hit_frame = ball_detections[elem[0]][1][1]
                 if y_coord_hit_frame <= net_y:
                     # Upper court : 1
-                    final_racket_hits.append((elem[1], 1))
+                    if change == False:
+                        final_racket_hits.append((elem[1], 1))
+                    else:
+                        final_racket_hits.append((elem[0], 1))
                 else:
                     # Lower court : 0
-                    final_racket_hits.append((elem[1],0))
+                    if change == False:
+                        final_racket_hits.append((elem[1],0))
+                    else:
+                        final_racket_hits.append((elem[0],0))
 
-        # Check if first from audio is in : should be the initial racket hit (serve) , that the visual model
-        # might have more problems with (due to ball tracking of first hit)
 
-        if final_racket_hits[0] != ball_shots_frames_audio[0]:
-            if ball_detections[ball_shots_frames_audio[0]][1][1] <= net_y:
-                final_racket_hits.insert(0,(ball_shots_frames_audio[0], 1))
-            else:
-                final_racket_hits.insert(0,(ball_shots_frames_audio[0], 0))
+
 
 
         # Cluster the found positions of each court side (i.e such that we can then determine
@@ -619,6 +644,13 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
             curr_min = np.inf
             correct_hit_frame = 0
             for hit_frame in clustered_hit_frame:
+                # if it is out of 
+                # TODO : better logic & fix !!!
+                if ball_detections[hit_frame[0]][1][1] < keypoints[1] \
+                    or ball_detections[hit_frame[0]][1][1] > keypoints[5]:
+                    correct_hit_frame = hit_frame[0]
+                    break
+
                 # Calculate the euclidean distances of players to the possible hits and find the minimal one
                 dist_0 = int(euclidean_distance(tuple(map(int, ball_detections[hit_frame[0]][1])), player_0_pos[hit_frame[0]]))
                 dist_1 = int(euclidean_distance(tuple(map(int, ball_detections[hit_frame[0]][1])), player_1_pos[hit_frame[0]]))
@@ -628,6 +660,8 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
                     curr_min = found_min 
             
             complete_final_racket_hits.append(correct_hit_frame)
+
+        return sorted(list(set(complete_final_racket_hits)))
             
 
 
@@ -729,7 +763,7 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
 
 
 
-    return complete_final_racket_hits
+    return sorted(list(set(complete_final_racket_hits)))
     
         
 
@@ -829,8 +863,8 @@ def convert_ball_detection_to_bbox(ball_track, padding=5):
             y = ball_track[i][1]
             # key 1 and values x_min, y_min, x_max, y_max
             bboxes[1] = [x-padding, y-padding, x+padding, y+padding]
-        else: # Draw somewhere out of image # TODO : check if works / make more consistent
-            bboxes[1] = [6000,6000,6000,6000]
+        else: # take last consistent track
+            bboxes[1] = lst_of_bboxes[-1][1]
         
         lst_of_bboxes.append(bboxes)
 

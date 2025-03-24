@@ -8,7 +8,6 @@ from utils import (read_video,
                    write_track, 
                    get_ball_shot_frames_audio, 
                    convert_mp4_to_mp3,
-                   draw_ball_hits, 
                    convert_ball_detection_to_bbox, 
                    get_ball_shot_frames_visual,
                    euclidean_distance,
@@ -36,9 +35,92 @@ import os
 
 def main():
     SCRAPING = False
+    # TAKE :
+
+    #
+    # 100
+    # yolo ball tracking
+    # Ground Truth : [40, 61, 85, 116]
+    # Ours : [40,61,85,119]
+    # 119 instead of 116 (neglectable mistake) (0 mistakes)
+
+    # 101
+    # yolo ball tracking
+    # Ground Truth : [12,28,58,89,115,153,179,210,243,284]
+    # Ours : [12,28, 58, 89, 115, 123, 153, 179, 211, 243, 283]
+    # additional 123 (1 mistake)
+
+
+    # 102 (perfect blue court video)
+    # yolo ball tracking 
+    # Ground Truth : [4, 21, 52, 82, 109, 141, 169, 201, 236, 282, 310, 343, 372, 427]
+    # Ours : [4, 21, 52, 82, 109, 141, 169, 201, 236, 282, 310, 343, 372, 427]
+    # (0 mistakes)
+
+    # 103 
+    # yolo ball tracking
+    # Ground Truth : [17, 34, 85]
+    # Ours : [17, 85]
+    # misses 34 (since ball tracking fails there a bit) (1 mistake)
+
+    # 105
+    # yolo ball tracking
+    # Ground Truth : [40, 56,91,127,164,189,224,259]
+    # Ours : [33, 64, 91, 127, 164, 259]
+    # 189 not caught due to too little audio (but visual caught it), 224 not caught because taken in cluster with 259 (ball tracking
+    # there too inconsistent and therefore shows both balls on same court side, even though not true)
+    # (4 mistakes)
+
+    # 107
+    # fails since player tracking fails at one point 
+
+
+
+    # 108
+    # yolo ball tracking
+    # Ground Truth : [21, 42, 89]
+    # Ours : [21, 42, 89]
+    # (0 mistakes)
+
+
+    # 109
+    # yolo ball tracking
+    # Ground Truth : [21, 35, 61, 90, 125, 154, 176, 211]
+    # Ours : [21, 35, 61, 90, 116, 154, 171, 204, 249]
+    # mistakes due to shoe sliding (picked up by audio) : possible fix : check where audio signal is stronger
+    # for a longer duration (so not just a single peak), can be indicator for shoe sliding
+    # picked up 249 due to ball tracking failure
+    # (4 mistakes)
+
+
+    # 110
+    # yolo ball tracking
+    # Ground Truth : [14,33,68, 103,136,176,211,254...]
+    # Ours : [5, 33, 68, 101, 209, 236, 277, 299, 339, 375, 406, 414]
+    # way too many mistakes
+
+
+
+    # 111 (perfect green court video)
+    # yolo ball tracking
+    # Ground Truth : [36,52,86,120,153,186,214,247]
+    # Ours : [36, 52, 86, 120, 153, 186, 214, 247]
+    # (0 mistakes)
+
+
+    # 116 (perfect clay court video, we just need to cut out the last part where it detects 95 wrongly)
+    # tracknet ball tracking for mini court coordinates, but yolo tracking for the visual direction change model
+    # Ground Truth : [1, 23, 65, 95]
+    # Ours : [1, 23, 65]
+    # (1 mistake that we can cherry pick into 0)
+
+
+
+
+
 
     # Change here which videos to get data from
-    video_numbers = [101] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
+    video_numbers = [116] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
 
@@ -65,6 +147,13 @@ def main():
         
         if ball_tracker_method == 'yolo':
             ball_tracker = BallTracker(model_path = 'models/yolo11best.pt')
+
+
+          #  ball_detections_YOLO = ball_tracker_yolo.detect_frames(video_frames_real, 
+          #                                                         read_from_stub = True, 
+          #                                                         stub_path = f'tracker_stubs/ball_detections_YOLO_{video_number}.pkl')
+            
+          #  ball_detections_YOLO = ball_tracker_yolo.interpolate_ball_positions(ball_detections_YOLO)
         
         if ball_tracker_method == 'tracknet':
             ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
@@ -79,6 +168,7 @@ def main():
 
         courtline_detector = CourtLineDetector(model_path = 'models/keypoints_model.pth') 
 
+
         # Read in video
         video_frames_real, fps, video_width, video_height = read_video(input_video_path)
 
@@ -86,9 +176,21 @@ def main():
         player_detections = player_tracker.detect_frames(video_frames_real,
                                                         read_from_stub = READ_STUBS,
                                                         stub_path = f'tracker_stubs/player_detections_{video_number}.pkl')
+        
 
+        
 
         if ball_tracker_method == 'tracknet':
+
+            ball_tracker_yolo = BallTracker(model_path = 'models/yolo11best.pt')
+
+
+            ball_detections_YOLO = ball_tracker_yolo.detect_frames(video_frames_real, 
+                                                                   read_from_stub = True, 
+                                                                   stub_path = f'tracker_stubs/ball_detections_YOLO_{video_number}.pkl')
+            
+            ball_detections_YOLO = ball_tracker_yolo.interpolate_ball_positions(ball_detections_YOLO)
+
 
             ball_detections, ball_detections_tracknet = detect_frames_TRACKNET(video_frames_real, video_number = video_number, tracker =ball_tracker_TRACKNET,
                                 video_width=video_width, video_height= video_height, read_from_stub = READ_STUBS, 
@@ -112,7 +214,12 @@ def main():
                                                                                                                                 refined_keypoints,
                                                                                                                                 chosen_players_ids)
         mini_court_keypoints = mini_court.drawing_key_points
-        ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_tracknet, fps)
+
+
+        # Get the first hit with less refined audio finding
+
+        first_hit = (get_ball_shot_frames_audio(input_video_path_audio, fps, height = 0.01, prominence=0.01))[0]
+        ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_YOLO, fps, mode = 'yolo')
         ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
      #   ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
 
@@ -126,17 +233,36 @@ def main():
      ##                                             adjustment = 0,
       #                                            MINI_COURT= True)
         
+    #    ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
+    #                                              ball_shots_frames_audio= ball_shots_frames_audio, 
+    #                                              fps = fps,
+    #                                              player_boxes = player_detections, 
+    #                                              keypoints = refined_keypoints,
+    #                                              ball_detections = ball_detections_tracknet,
+    #                                              max_distance_param = 7,
+    #                                              adjustment = 0,
+    #                                              MINI_COURT= False,
+    #                                              CLUSTERING= False)
+
+
+        # TODO :
+        # this for mini court (since coordiantes stable enougn most cases)
+        # initial first hit (serve) detection only via audio : find initial highest peak (write function)
+        # and then the normal logic with clustering and checking on which side (should be stable enough)
         ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
                                                   ball_shots_frames_audio= ball_shots_frames_audio, 
                                                   fps = fps,
-                                                  player_boxes = player_detections, 
-                                                  keypoints = refined_keypoints,
-                                                  ball_detections = ball_detections_tracknet,
+                                                  player_boxes = player_mini_court_detections, 
+                                                  keypoints = mini_court_keypoints,
+                                                  ball_detections = ball_mini_court_detections,
                                                   max_distance_param = 7,
                                                   adjustment = 0,
-                                                  MINI_COURT= False,
+                                                  MINI_COURT= True,
                                                   CLUSTERING= False)
 
+
+        if ball_shots_frames[0] != first_hit:
+            ball_shots_frames.insert(0, first_hit)
 
         print("Ball Shots from Visual : ", ball_shots_frames_visual)
         print("Ball Shots from Audio : ", ball_shots_frames_audio)
@@ -189,6 +315,7 @@ def main():
         # Look into output/trajectory_model_videos and look at the _frames videos : here we can see the frame the ball hits the ground
         # If the ball is too occluded : look into the output/trajectory_model_videos folder and there the normal output videos :
         # see if the trajectory ("V" shape) is still visible ; else add "None"
+        """
         if video_number == 100:
             ball_bounce_frames = [49, 75, 106, 142]
         if video_number == 101:
@@ -307,25 +434,29 @@ def main():
                 #  '255', '256', '257', '258', '259', '260', '282', '283', '284', '285', '286', '287', '292', '312', '313', '314', '315']
 
         ball_shots_frames = sorted(ball_shots_frames)
-
+        """
 
         
 
         # CHANGE HERE PATH
-        if SCRAPING:
-            scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
+     #   if SCRAPING:
+      #      scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
 
         # change accordingly if on line or on circles
   
-        if not SCRAPING:
-            _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
-            break
+       # if not SCRAPING:
+        #    _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
+         #   break
     
 
 
         # Save video
         #save_video(output_frames, output_video_path, fps)
-        #save_video(video_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
+
+        
+        output_frames_real = mini_court.draw_mini_court(video_frames_real)
+        output_frames_real = mini_court.draw_points_on_mini_court(output_frames_real, ball_mini_court_detections, color = (0,255,255))
+        save_video(output_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
 
 
 

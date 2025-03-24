@@ -16,9 +16,11 @@ from utils import (read_video,
                    draw_debug_window,
                    draw_frames_number,
                    draw_ball_landings,
-                   map_court_position_to_player_id
+                   map_court_position_to_player_id,
+                   get_ball_shot_frames_visual, 
+                   combine_audio_visual
                    )
-from trackers import (PlayerTracker, BallTrackerNetTRACE)
+from trackers import (PlayerTracker, BallTrackerNetTRACE, BallTracker)
 from mini_court import MiniCourt
 from ball_landing import (BounceCNN, make_prediction, evaluation_transform)
 from court_line_detector import CourtLineDetector
@@ -49,6 +51,8 @@ def main():
     DEBUG = True
 
     # Video to run inference on
+    # Note : for video 116, change in mini_court.convert_bounding_boxes_to_mini_court_coordinates(...) ball_detections_YOLO to ball_detections
+    # (leads to better results)
     video_number = 101
     # ground_truth_bounce = [20,50,77,106,138,168,197,230,270,301]
     print(f"Running inference on video {video_number}")
@@ -73,6 +77,10 @@ def main():
     ######## DETECTIONS ########
 
     # Initialize Ball Tracker
+    # YOLO
+    ball_tracker_yolo = BallTracker(model_path = 'models/yolo11best.pt')
+    # TrackNet
+
     ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
     saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=device)
     ball_tracker_TRACKNET.load_state_dict(saved_state_dict['model_state'])
@@ -93,10 +101,17 @@ def main():
                                                     read_from_stub = READ_STUBS,
                                                     stub_path = f'tracker_stubs/player_detections_{video_number}.pkl')
 
-    # Detect & Track Ball
+    # Detect & Track Ball (TrackNet)
     ball_detections, ball_detections_tracknet = detect_frames_TRACKNET(video_frames, video_number = video_number, tracker =ball_tracker_TRACKNET,
                         video_width=video_width, video_height= video_height, read_from_stub = READ_STUBS, 
                         stub_path=  f'tracker_stubs/tracknet_ball_detections_{video_number}.pkl')
+    
+    # Detect & Track Ball (YOLO)
+    ball_detections_YOLO = ball_tracker_yolo.detect_frames(video_frames, 
+                                                           read_from_stub = READ_STUBS, 
+                                                            stub_path = f'tracker_stubs/ball_detections_YOLO_{video_number}.pkl')
+            
+    ball_detections_YOLO = ball_tracker_yolo.interpolate_ball_positions(ball_detections_YOLO)
 
     # Detect court lines (on just the first frame, then they are fixed) 
     refined_keypoints = courtline_detector.predict(video_frames[0])
@@ -115,15 +130,42 @@ def main():
 
     # Convert player positions to mini court positions
     player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
-                                                                                                                            ball_detections,
+                                                                                                                            ball_detections_YOLO,
                                                                                                                             refined_keypoints,
                                                                                                                             chosen_players_ids)
+    
+    mini_court_keypoints = mini_court.drawing_key_points
 
-    # Get Racket Hits based on audio
+    # Get Racket Hits based on audio & visual information
+
+    # Get first hit with less sensitive audio peak detection
+    first_hit = (get_ball_shot_frames_audio(input_video_path_audio, fps, height = 0.01, prominence=0.01))[0]
+    ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_YOLO, fps, mode = 'yolo')
     ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
-    ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
+
+    ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
+                                                  ball_shots_frames_audio= ball_shots_frames_audio, 
+                                                  fps = fps,
+                                                  player_boxes = player_mini_court_detections, 
+                                                  keypoints = mini_court_keypoints,
+                                                  ball_detections = ball_mini_court_detections,
+                                                  max_distance_param = 7,
+                                                  adjustment = 0,
+                                                  MINI_COURT= True,
+                                                  CLUSTERING= False)
+
+
+    if ball_shots_frames[0] != first_hit:
+        ball_shots_frames.insert(0, first_hit)
+
+    print("Ball Shots from Visual : ", ball_shots_frames_visual)
     print("Ball Shots from Audio : ", ball_shots_frames_audio)
-    print("Audio Refinment :", ball_shots_frames)
+    print("Combined :", ball_shots_frames)
+
+  #  ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
+  #  ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
+   # print("Ball Shots from Audio : ", ball_shots_frames_audio)
+   # print("Audio Refinment :", ball_shots_frames)
     ball_shots_frames_stats = ball_shots_frames.copy()
 
     # First, create a completely black video with same dimensions & fps of actual video 
@@ -171,6 +213,7 @@ def main():
     
     
 
+
     ######## GROUND TRUTH ########
     
     if DEBUG:
@@ -178,12 +221,7 @@ def main():
 
         if video_number == 101:
             ground_truth_bounce = [20,50,77,106,138,197,230,270,301]
-            ball_shots_frames_stats.remove(19)
-            ball_shots_frames_stats.remove(69)
             ball_shots_frames_stats.remove(123)
-            ball_shots_frames_stats.remove(192)
-            ball_shots_frames_stats.remove(253)
-            ball_shots_frames_stats.remove(296)
 
         if video_number == 102:
             ground_truth_bounce = [13,41,73,105,131,159,190,221,270,299,329,363,414]
@@ -246,7 +284,6 @@ def main():
         
         if video_number == 111:
             ground_truth_bounce = [43, 76, 114, 144, 171, 207, 236]
-            ball_shots_frames_stats.remove(274)
         
         if video_number == 112:
             ground_truth_bounce = [45, 83, 109, 150, 178, 224, 268, 298, 330, 363, 405, 438]
@@ -280,12 +317,6 @@ def main():
         
         if video_number == 116:
             ground_truth_bounce = [12, 51, 81]
-            ball_shots_frames_stats.remove(7)
-            ball_shots_frames_stats.remove(16)
-            ball_shots_frames_stats.remove(35)
-            ball_shots_frames_stats.remove(53)
-            ball_shots_frames_stats.remove(74)
-            ball_shots_frames_stats.remove(81)
             ball_shots_frames_stats.remove(95)
         
         if video_number == 117:
