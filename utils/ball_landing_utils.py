@@ -6,6 +6,8 @@ import random
 import shutil 
 import pandas as pd
 from sklearn.cluster import DBSCAN
+from collections import defaultdict
+import re
 
 def cluster_series(arr, eps=3, min_samples=2, delay=2):
     """Cluster a series of frames and return the minimum value of each cluster with a delay adjustment."""
@@ -100,6 +102,8 @@ def scraping_data_for_inference(video_n, output_path, input_frames, ball_shots_f
     return saved_frames
 
 
+
+'''
 def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_shots_frames, trace, ball_detections):
 
     """
@@ -191,9 +195,85 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
             if idx > ball_shots_frames_original[1]:
                 f = os.path.join(output_path_no_bounce, f"{video_n}_frame_{idx}.jpg")
                 cv2.imwrite(f, frame)
+'''
 
+def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_shots_frames, trace, ball_detections):
+    """
+    Scrape the training data 
+    """
+    output_path_bounce = output_path + '/bounce'
+    output_path_no_bounce = output_path + '/no_bounce'
 
+    if not os.path.exists(output_path_bounce):
+        os.makedirs(output_path_bounce)
 
+    if not os.path.exists(output_path_no_bounce):
+        os.makedirs(output_path_no_bounce)
+
+    # Extend ball_shots_frames 
+    ball_shots_frames_original = deepcopy(ball_shots_frames)
+
+    # Extend the ball_shots_frames 
+    for i in ball_shots_frames_original:
+        for j in range(i, i + trace//2):
+            ball_shots_frames.append(j)
+
+    # Convert sets for faster lookup time 
+    ball_bounce_frames = set(ball_bounce_frames)
+    ball_shots_frames = set(ball_shots_frames)
+    bounce_frames_curr = []
+    bounce_frames_continuation = []
+
+    for idx, frame in enumerate(input_frames):
+        # Convert each frame to greyscale before processing or saving
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        if idx in ball_bounce_frames and idx > ball_shots_frames_original[1]:
+            if trace == 10:
+                bounce_frames_curr = [idx+2+i for i in range(6)]
+            elif trace == 3:
+                bounce_frames_curr = [idx + 1]
+            elif trace == 5:
+                bounce_frames_curr = [idx+1+i for i in range(3)]
+
+            # Find the next racket hit after a bounce
+            for i in ball_shots_frames_original:
+                if i > idx:
+                    curr_racket_hit = i 
+                    break 
+                else:
+                    curr_racket_hit = None
+
+            if curr_racket_hit:
+                bounce_frames_continuation = [i for i in range(idx, curr_racket_hit)]
+            else:
+                bounce_frames_continuation = [i for i in range(idx, len(input_frames))]
+
+            bounce_frames_curr = list(filter(lambda x: x <= len(input_frames) - 1, bounce_frames_curr))
+
+            for i in bounce_frames_curr:
+                if i in ball_shots_frames_original:
+                    break
+                elif any(ball_detect[0] is None for ball_detect in ball_detections[i:i+4]):
+                    continue
+
+                # Save the greyscale frame
+                curr_frame_gray = cv2.cvtColor(input_frames[i], cv2.COLOR_BGR2GRAY)
+                f = os.path.join(output_path_bounce, f"{video_n}_frame_{i}.jpg")
+                cv2.imwrite(f, curr_frame_gray)
+                
+                # Save the flipped version (also in greyscale)
+                f = os.path.join(output_path_bounce, f"{video_n}_frame_flipped_{i}.jpg")
+                cv2.imwrite(f, cv2.flip(frame_gray, 1))
+
+        elif idx in bounce_frames_continuation or idx in ball_shots_frames:
+            continue 
+        else:
+            if idx > ball_shots_frames_original[1]:
+                f = os.path.join(output_path_no_bounce, f"{video_n}_frame_{idx}.jpg")
+                cv2.imwrite(f, frame_gray)
+
+"""
 def splitting_data(main_dir, train_ratio = 0.75, val_ratio = 0.15, test_ratio = 0.10):
     
 
@@ -269,6 +349,138 @@ def splitting_data(main_dir, train_ratio = 0.75, val_ratio = 0.15, test_ratio = 
               f"Test={stats['test']} ({stats['test']/stats['total']:.1%})")
     
     return train_dir, val_dir, test_dir
+
+"""
+
+
+def splitting_data(main_dir, train_videos, val_videos, test_videos):
+    """
+    Split data by manually specifying which video numbers go into which split.
+    
+    Args:
+        main_dir: Directory containing 'bounce' and 'no_bounce' folders
+        train_videos: List of video numbers to include in training set
+        val_videos: List of video numbers to include in validation set
+        test_videos: List of video numbers to include in test set
+    
+    Returns:
+        Paths to train, validation, and test directories
+    """
+    # Verify no overlap between splits
+    assert len(set(train_videos) & set(val_videos)) == 0, "Train and validation videos overlap"
+    assert len(set(train_videos) & set(test_videos)) == 0, "Train and test videos overlap"
+    assert len(set(val_videos) & set(test_videos)) == 0, "Validation and test videos overlap"
+    
+    # Create output directories
+    train_dir = os.path.join(main_dir, "train")
+    val_dir = os.path.join(main_dir, "val")
+    test_dir = os.path.join(main_dir, "test")
+    
+    # Create class directories for each split
+    for dir_path in [train_dir, val_dir, test_dir]:
+        os.makedirs(os.path.join(dir_path, "no_bounce"), exist_ok=True)  # class 0
+        os.makedirs(os.path.join(dir_path, "bounce"), exist_ok=True)     # class 1
+
+    # Map class names to labels
+    class_label_map = {
+        "no_bounce": 0,
+        "bounce": 1
+    }
+    
+    # Map video numbers to the respective splits
+    split_mapping = {}
+    for video in train_videos:
+        split_mapping[video] = 'train'
+    for video in val_videos:
+        split_mapping[video] = 'val'
+    for video in test_videos:
+        split_mapping[video] = 'test'
+    
+    # Function to extract video number from filename
+    def extract_video_number(filename):
+        match = re.match(r'(\d+)_frame', filename)
+        if match:
+            return int(match.group(1))
+        return None
+    
+    # Group files by video number for each class
+    video_groups = {class_name: defaultdict(list) for class_name in class_label_map.keys()}
+    
+    # Distribution dictionary for reporting
+    distribution = {class_name: {'total': 0, 'train': 0, 'val': 0, 'test': 0, 'label': label} 
+                    for class_name, label in class_label_map.items()}
+    
+    # Process each class
+    for class_name in class_label_map.keys():
+        class_source = os.path.join(main_dir, class_name)
+        
+        # Make sure the source directory exists
+        if not os.path.exists(class_source):
+            print(f"Warning: Source directory {class_source} doesn't exist. Skipping.")
+            continue
+        
+        # Get all image files
+        image_files = [f for f in os.listdir(class_source) 
+                      if f.lower().endswith(('.jpg'))]
+        
+        # Group by video number
+        unassigned_videos = set()
+        for file_name in image_files:
+            video_number = extract_video_number(file_name)
+            if video_number is not None:
+                video_groups[class_name][video_number].append(file_name)
+                if video_number not in split_mapping:
+                    unassigned_videos.add(video_number)
+        
+        # Warn about unassigned videos
+        if unassigned_videos:
+            print(f"Warning: The following videos in {class_name} are not assigned to any split: {sorted(unassigned_videos)}")
+        
+        # Copy files and update distribution
+        for video_num, files in video_groups[class_name].items():
+            # Skip if video not in any split
+            if video_num not in split_mapping:
+                continue
+                
+            split_name = split_mapping[video_num]
+            target_dir = os.path.join(main_dir, split_name, class_name)
+            
+            for file_name in files:
+                src = os.path.join(class_source, file_name)
+                dst = os.path.join(target_dir, file_name)
+                shutil.copy2(src, dst)
+            
+            # Update distribution stats
+            file_count = len(files)
+            distribution[class_name]['total'] += file_count
+            distribution[class_name][split_name] += file_count
+    
+    # Print distribution summary
+    print(f"Dataset split complete with custom video assignments. Distribution summary:")
+    for class_name, stats in distribution.items():
+        if stats['total'] > 0:
+            print(f"  {class_name} (Label: {stats['label']}): Total={stats['total']}, "
+                  f"Train={stats['train']} ({stats['train']/stats['total']:.1%}), "
+                  f"Val={stats['val']} ({stats['val']/stats['total']:.1%}), "
+                  f"Test={stats['test']} ({stats['test']/stats['total']:.1%})")
+        else:
+            print(f"  {class_name} (Label: {stats['label']}): No files processed")
+    
+    # Print video assignments
+    print("\nVideo assignments:")
+    for class_name in class_label_map.keys():
+        videos_by_split = {'train': [], 'val': [], 'test': []}
+        for video_num in video_groups[class_name]:
+            if video_num in split_mapping:
+                videos_by_split[split_mapping[video_num]].append(video_num)
+        
+        print(f"\n{class_name}:")
+        for split, videos in videos_by_split.items():
+            videos_str = ', '.join(map(str, sorted(videos)))
+            print(f"  {split}: {videos_str}")
+    
+    return train_dir, val_dir, test_dir
+
 
 def filter_bounce_frames_for_player(ball_landing_frames, ball_detections, keypoints, player="Lower"):
     """

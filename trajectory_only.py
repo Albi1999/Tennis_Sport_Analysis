@@ -118,9 +118,9 @@ def main():
 
 
 
-
+    counter  = 0
     # Change here which videos to get data from
-    video_numbers = [116] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
+    video_numbers = [i for i in range(1000,1015)] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
 
@@ -128,10 +128,10 @@ def main():
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        input_video_path = f'data/input_video{video_number}.mp4'  # Toy example
+        input_video_path = f'data/new_input_videos/input_video_{video_number}.mp4'  # Toy example
         #input_video_path = f'data/videos/video_{video_number}.mp4' # Real example
 
-        input_video_path_audio = f'data/input_video{video_number}_audio.mp3'
+        input_video_path_audio = f'data/new_input_videos/input_video_{video_number}_audio.mp3'
         convert_mp4_to_mp3(input_video_path, input_video_path_audio)
             
         output_video_path = f'output/trajectory_model_videos/output_video{video_number}.mp4'
@@ -186,7 +186,7 @@ def main():
 
 
             ball_detections_YOLO = ball_tracker_yolo.detect_frames(video_frames_real, 
-                                                                   read_from_stub = True, 
+                                                                   read_from_stub = READ_STUBS, 
                                                                    stub_path = f'tracker_stubs/ball_detections_YOLO_{video_number}.pkl')
             
             ball_detections_YOLO = ball_tracker_yolo.interpolate_ball_positions(ball_detections_YOLO)
@@ -221,34 +221,7 @@ def main():
         first_hit = (get_ball_shot_frames_audio(input_video_path_audio, fps, height = 0.01, prominence=0.01))[0]
         ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_YOLO, fps, mode = 'yolo')
         ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
-     #   ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
 
-     #   ball_shots_frames_MINI = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
-     #                                             ball_shots_frames_audio= ball_shots_frames_audio, 
-     #                                             fps = fps,
-     #                                             player_boxes = player_mini_court_detections, 
-     #                                             keypoints = mini_court_keypoints,
-     #                                             ball_detections = ball_mini_court_detections,
-      #                                            max_distance_param = 7,
-     ##                                             adjustment = 0,
-      #                                            MINI_COURT= True)
-        
-    #    ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
-    #                                              ball_shots_frames_audio= ball_shots_frames_audio, 
-    #                                              fps = fps,
-    #                                              player_boxes = player_detections, 
-    #                                              keypoints = refined_keypoints,
-    #                                              ball_detections = ball_detections_tracknet,
-    #                                              max_distance_param = 7,
-    #                                              adjustment = 0,
-    #                                              MINI_COURT= False,
-    #                                              CLUSTERING= False)
-
-
-        # TODO :
-        # this for mini court (since coordiantes stable enougn most cases)
-        # initial first hit (serve) detection only via audio : find initial highest peak (write function)
-        # and then the normal logic with clustering and checking on which side (should be stable enough)
         ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
                                                   ball_shots_frames_audio= ball_shots_frames_audio, 
                                                   fps = fps,
@@ -267,9 +240,8 @@ def main():
         print("Ball Shots from Visual : ", ball_shots_frames_visual)
         print("Ball Shots from Audio : ", ball_shots_frames_audio)
         print("Combined :", ball_shots_frames)
-    #    print("Combined using Mini Court : ", ball_shots_frames_MINI)
 
-        
+
         # Draw Output
 
         # First, create the completely black video
@@ -289,7 +261,7 @@ def main():
 
         
         # Draw Keypoints of court 
-        output_frames = courtline_detector.draw_keypoints_on_video(output_frames, refined_keypoints)
+      #  output_frames = courtline_detector.draw_keypoints_on_video(output_frames, refined_keypoints)
 
 
         # Draw frame number (top left corner) 
@@ -315,6 +287,20 @@ def main():
         # Look into output/trajectory_model_videos and look at the _frames videos : here we can see the frame the ball hits the ground
         # If the ball is too occluded : look into the output/trajectory_model_videos folder and there the normal output videos :
         # see if the trajectory ("V" shape) is still visible ; else add "None"
+
+
+        ball_bounce_frames_hardc = [[76],[56,92],[23,51,87], [20,49,76,101,141],[36,67,101],
+                                     [18,56,86], [14,48,80], [11,51,80,119,150,180,211,238,271,312], [16,48,79,109,139,172,201],[3, 37,68],
+                                     [23, 54, 84, 127, 152, 183, 213, 243, 267, 304, 335, 384, 417, 444, 478, 504,530, 565, 592, 636, 664, 710,739, 768,805,835],
+                                     [19, 58], [34, 65, 91], [34, 63, 97, 129], [26, 65, 94]
+                                     ]
+        ball_shots_frames_hardc = [[64,84],[43,65],[13,30,60], [9,27,52,84,115], [24,45,78],[8,27,71], 
+                                   [5,22,58], [3,20,62,94,126,157,189,219,252,285], [8,26,61,90,119,148,179,212], [12, 47],
+                                   [10,33, 65,98,136,166, 191, 222, 237, 286, 317, 351, 392, 424, 456, 485, 516, 543, 572, 605, 647, 677, 718, 750, 784, 817],
+                                   [10, 28, 72], [24, 44, 74],[22, 46, 73, 108], [18, 35, 80]
+                                   ]
+
+
         """
         if video_number == 100:
             ball_bounce_frames = [49, 75, 106, 142]
@@ -437,26 +423,29 @@ def main():
         """
 
         
-
+    
         # CHANGE HERE PATH
-     #   if SCRAPING:
-      #      scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames, ball_shots_frames = ball_shots_frames, trace = trace, ball_detections = ball_detections_tracknet)
+        if SCRAPING:
+            scraping_data(video_n = video_number, output_path= output_path_circle, input_frames= output_frames, ball_bounce_frames= ball_bounce_frames_hardc[counter], ball_shots_frames = ball_shots_frames_hardc[counter], trace = trace, ball_detections = ball_detections_tracknet)
 
-        # change accordingly if on line or on circles
+        counter += 1
   
-       # if not SCRAPING:
-        #    _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles')
-         #   break
+        if not SCRAPING:
+            train_videos = [1000,1001,1002,1003,1004,1005,1006,1007,1008,1010]
+            val_videos = [1009,1011]
+            test_videos = [1012,1013,1014]
+            _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles', train_videos = train_videos, val_videos = val_videos, test_videos = test_videos)
+            break
     
 
 
         # Save video
-        #save_video(output_frames, output_video_path, fps)
+    #    save_video(output_frames, output_video_path, fps)
 
         
-        output_frames_real = mini_court.draw_mini_court(video_frames_real)
-        output_frames_real = mini_court.draw_points_on_mini_court(output_frames_real, ball_mini_court_detections, color = (0,255,255))
-        save_video(output_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
+    #    output_frames_real = mini_court.draw_mini_court(video_frames_real)
+    #    output_frames_real = mini_court.draw_points_on_mini_court(output_frames_real, ball_mini_court_detections, color = (0,255,255))
+    ##    save_video(output_frames_real, f'output/trajectory_model_videos/output_video{video_number}_frames.mp4', fps)
 
 
 

@@ -23,34 +23,34 @@ class BounceCNN(nn.Module):
 
         
         # 1st block
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3)
-        self.bn1 = nn.BatchNorm2d(32)
+        self.conv1 = nn.Conv2d(1, 8, kernel_size=7, stride=2, padding=3)
+        self.bn1 = nn.BatchNorm2d(8)
         self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
         # 2nd
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, stride=1, padding=2)
-        self.bn2 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(8, 16, kernel_size=5, stride=1, padding=2)
+        self.bn2 = nn.BatchNorm2d(16)
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
         
         # 3rd
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        self.bn3 = nn.BatchNorm2d(32)
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
         
         # 4th
-        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
-        self.bn4 = nn.BatchNorm2d(256)
+        self.conv4 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.bn4 = nn.BatchNorm2d(64)
         self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
         
 
        
-        # Adaptive pooling to ensure fixed size regardless of input dimensions # TODO : take out, since we resize anyway
+        # Adaptive pooling to ensure fixed size regardless of input dimensions 
         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
         
         # FCNN
-        self.fc1 = nn.Linear(256, 64)
+        self.fc1 = nn.Linear(64, 16)
         self.dropout = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(64, 1)  # Binary output
+        self.fc2 = nn.Linear(16, 1)  # Binary output
         
     def forward(self, x):
         # Apply convolutional blocks
@@ -89,8 +89,8 @@ class BounceDataset(Dataset):
         return len(self.image_paths)
     
     def __getitem__(self, idx):
-        image = cv2.imread(self.image_paths[idx])
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  
+        image = cv2.imread(self.image_paths[idx], cv2.IMREAD_GRAYSCALE)
+      #  image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  
         
         if self.transform:
             image = self.transform(image)
@@ -99,16 +99,15 @@ class BounceDataset(Dataset):
         return image, label
 
     
-def train_model(model, train_loader, val_loader, num_epochs=20, patience=7):
+def train_model(model, train_loader, val_loader, num_epochs=20, factor = 4.0, patience=7):
     print("Training Model...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     
     # Define loss and optimizer
-    pos_weight = torch.tensor([2.0]).to(device)  # Weighted loss for class imbalance
+    pos_weight = torch.tensor(factor).to(device)  # Weighted loss for class imbalance (calculated on train set)
   #  criterion = nn.BCEWithLogitsLoss()
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-  #  criterion = nn.BCELoss() # TODO : ADD WEIGHTING FOR CLASS IMBALANCE (if we still have it)
   #  optimizer = optim.Adam(model.parameters(), lr=0.01)
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-6)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
@@ -180,20 +179,20 @@ def train_model(model, train_loader, val_loader, num_epochs=20, patience=7):
 
 def compute_mean_std(dataset):
     loader = DataLoader(dataset, batch_size=32, shuffle=False)
-    mean = torch.zeros(3)  # For RGB channels
-    std = torch.zeros(3)
+    mean = 0.0
+    std = 0.0
     total_samples = 0
 
     for images, _ in loader:
-        batch_samples = images.size(0)  # Get batch size
-        images = images.view(batch_samples, images.size(1), -1)  # Flatten spatial dimensions
-        mean += images.mean([0, 2])  # Compute mean per channel
-        std += images.std([0, 2])  # Compute std per channel
+        batch_samples = images.size(0)
+        images = images.view(batch_samples, -1)
+        mean += images.mean(1).sum().item()
+        std += images.std(1).sum().item()
         total_samples += batch_samples
 
     mean /= total_samples
     std /= total_samples
-    return mean, std
+    return torch.tensor([mean]), torch.tensor([std])
 
 def evaluate_model(model, test_loader):
     print("Evaluating Model...")
@@ -315,7 +314,7 @@ def evaluation_transform(mean, std):
         transforms.ToPILImage(),
         transforms.Resize((128, 128)),  
         transforms.ToTensor(),  
-        transforms.Normalize(mean=mean.tolist(), std=std.tolist())
+        transforms.Normalize(mean=mean[0].item(), std=std[0].item())
     ])
 
     return eval_transform
@@ -402,9 +401,9 @@ if __name__ == "__main__":
         transforms.Resize((128, 128)),  
         transforms.RandomHorizontalFlip(p=0.5),  
         transforms.RandomRotation(10),  
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  
+     #   transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  
         transforms.ToTensor(),  
-        transforms.Normalize(mean=mean.tolist(), std=std.tolist())  # Apply computed values
+        transforms.Normalize(mean=mean[0].item(), std=std[0].item())  # Apply computed values (just first value, as we have greyscale)
     ])
 
 
@@ -412,7 +411,7 @@ if __name__ == "__main__":
         transforms.ToPILImage(),
         transforms.Resize((128, 128)),  
         transforms.ToTensor(),  
-        transforms.Normalize(mean=mean.tolist(), std=std.tolist())
+        transforms.Normalize(mean=mean[0].item(), std=std[0].item())
     ])
 
     # Create datasets
@@ -435,13 +434,18 @@ if __name__ == "__main__":
     )
     
     # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64)
-    test_loader = DataLoader(test_dataset, batch_size=64)
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=16)
+    test_loader = DataLoader(test_dataset, batch_size=16)
+
+    # Calculate the imbalance factor between bounce & no bounce in the train set
+
+    factor = len(no_bounce_train)/len(bounce_train)
+
 
     # Initialize and train model
     model = BounceCNN()
-    trained_model = train_model(model, train_loader, val_loader, num_epochs = 50) # Comment this line if you want to skip training
+    trained_model = train_model(model, train_loader, val_loader, num_epochs = 50, factor = factor) # Comment this line if you want to skip training
     
     # Load best model
     model.load_state_dict(torch.load('models/best_bounce_model.pth'))
