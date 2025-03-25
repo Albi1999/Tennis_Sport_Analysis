@@ -247,13 +247,14 @@ class PlayerTracker:
         return output_video_frames
 
     # TODO : Implement this method with supervision library
-    def draw_ellipse_bboxes(self, video_frames, player_detections):
+    def draw_ellipse_bboxes(self, video_frames, player_detections, player):
         """
         Draw ellipses around the players in cyan color.
         
         Args:
             video_frames (list): List of frame images.
             player_detections (list): List of dictionaries, where each dictionary contains the player detections in a frame.
+            player (str): 'Upper' or 'Lower' player.
         
         Returns:
             output_video_frames (list): Frames of the video, now annotated with ellipses around players.
@@ -262,7 +263,9 @@ class PlayerTracker:
         
         # Create an EllipseAnnotator object with custom colors
         color_palette = ['#00ffff', '#800080'] # Cyan and Purple
+        color_idx = 0 if player == 'Upper' else 1
         ellipse_annotator = sv.EllipseAnnotator(color=sv.ColorPalette.from_hex(color_palette))
+        triangle_annotator = sv.TriangleAnnotator(color=sv.Color.from_hex(color_palette[color_idx]))
 
         for frame, player_dict in zip(video_frames, player_detections):
             # Make a copy of the original frame
@@ -286,8 +289,32 @@ class PlayerTracker:
                     class_id=class_id_array
                 )
                 
-                # Annotate the frame with ellipses
+                selected_player_detections = sv.Detections.empty()  # Inizializza come vuoto
+
+                if len(xyxy_array) >= 2:
+                    # Calcola il centro y di ciascun bbox per determinare quale è "Upper" e quale è "Lower"
+                    y_centers = [(bbox[1] + bbox[3]) / 2 for bbox in xyxy_array]
+                    
+                    # Seleziona l'indice del giocatore in base alla posizione
+                    if player == 'Upper':
+                        selected_index = np.argmin(y_centers)  # Il giocatore con y minore è in alto
+                    else:  # 'Lower'
+                        selected_index = np.argmax(y_centers)  # Il giocatore con y maggiore è in basso
+                    
+                    # Crea detections solo per il giocatore selezionato
+                    selected_player_detections = sv.Detections(
+                        xyxy=np.array([xyxy_array[selected_index]]),
+                        class_id=np.array([class_id_array[selected_index]])
+                    )
+                    
+                elif len(xyxy_array) == 1:
+                    # Se c'è un solo giocatore rilevato, usa quello
+                    selected_player_detections = detections
+            
+                
+                # Annotate the frame with ellipses and triangles
                 annotated_frame = ellipse_annotator.annotate(frame, detections)
+                annotated_frame = triangle_annotator.annotate(frame, selected_player_detections)
             
             output_video_frames.append(annotated_frame)
         

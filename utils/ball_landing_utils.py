@@ -11,19 +11,23 @@ import re
 
 def cluster_series(arr, eps=3, min_samples=2, delay=2):
     """Cluster a series of frames and return the minimum value of each cluster with a delay adjustment."""
-    arr = np.array(sorted(map(int, arr))).reshape(-1, 1)
-    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-    labels = dbscan.fit_predict(arr)
+    if len(arr) == 0:
+        print("No ball landing frames detected.")
+        return []
     
-    df = pd.DataFrame({'Value': arr.flatten(), 'Cluster': labels})
-    
-    # Filter out the outliers (cluster label -1)
-    df = df[df['Cluster'] != -1]
-    
-    min_values = df.groupby('Cluster')['Value'].min().reset_index()
-    min_values['Value'] -= delay  # Apply delay adjustment
-    
-    return min_values['Value'].values.tolist()
+    else:
+        arr = np.array(sorted(map(int, arr))).reshape(-1, 1)
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+        labels = dbscan.fit_predict(arr)
+        
+        df = pd.DataFrame({'Value': arr.flatten(), 'Cluster': labels})
+        
+        # Filter out the outliers (cluster label -1)
+        df = df[df['Cluster'] != -1]
+        
+        min_values = df.groupby('Cluster')['Value'].min().reset_index()
+        min_values['Value'] -= delay  # Apply delay adjustment
+        
 
 def create_black_video(output_path, width, height, fps, frame_count):
     """

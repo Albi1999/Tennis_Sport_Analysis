@@ -63,22 +63,22 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             cv2.putText(frame, text, (start_x+130, start_y+80), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
-            # Player speed
-            text = "Player Speed"
-            cv2.putText(frame, text, (start_x+10, start_y+120), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
-            text = f"{row['player_1_last_player_speed']:.1f} km/h    {row['player_2_last_player_speed']:.1f} km/h"
-            cv2.putText(frame, text, (start_x+130, start_y+120), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-            
             # Average shot speed
             text = "avg. Shot Speed"
-            cv2.putText(frame, text, (start_x+10, start_y+160), 
+            cv2.putText(frame, text, (start_x+10, start_y+120), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
             text = f"{row['player_1_average_shot_speed']:.1f} km/h    {row['player_2_average_shot_speed']:.1f} km/h"
             cv2.putText(frame, text, (start_x+130, start_y+160), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
             
+            # Player speed
+            text = "Player Speed"
+            cv2.putText(frame, text, (start_x+10, start_y+160), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+            text = f"{row['player_1_last_player_speed']:.1f} km/h    {row['player_2_last_player_speed']:.1f} km/h"
+            cv2.putText(frame, text, (start_x+130, start_y+120), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+    
             # Average player speed
             text = "avg. Player Speed"
             cv2.putText(frame, text, (start_x+10, start_y+200), 
@@ -92,7 +92,26 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             y_offset = start_y + 80
             line_spacing = 35
             
+            # Player speed
+            text = "Player Speed"
+            cv2.putText(frame, text, (start_x+10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_last_player_speed']:.1f} km/h"
+            cv2.putText(frame, text, (start_x+180, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            
+
+            # Average player speed
+            y_offset += line_spacing
+            text = "Avg Player Speed"
+            cv2.putText(frame, text, (start_x+10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            text = f"{row[f'player_{selected_player_id}_average_player_speed']:.1f} km/h"
+            cv2.putText(frame, text, (start_x+180, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            
             # Shot speed
+            y_offset += line_spacing
             text = "Shot Speed"
             cv2.putText(frame, text, (start_x+10, y_offset), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
@@ -123,15 +142,6 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             cv2.putText(frame, text, (start_x+180, y_offset), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Player speed
-            y_offset += line_spacing
-            text = "Player Speed"
-            cv2.putText(frame, text, (start_x+10, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            text = f"{row[f'player_{selected_player_id}_last_player_speed']:.1f} km/h"
-            cv2.putText(frame, text, (start_x+180, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            
             # Average shot speed
             y_offset += line_spacing
             text = "Avg Shot Speed"
@@ -141,14 +151,6 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             cv2.putText(frame, text, (start_x+180, y_offset), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Average player speed
-            y_offset += line_spacing
-            text = "Avg Player Speed"
-            cv2.putText(frame, text, (start_x+10, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            text = f"{row[f'player_{selected_player_id}_average_player_speed']:.1f} km/h"
-            cv2.putText(frame, text, (start_x+180, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         
             # Hits counter
             y_offset += line_spacing

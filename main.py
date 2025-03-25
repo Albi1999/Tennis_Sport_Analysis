@@ -18,7 +18,8 @@ from utils import (read_video,
                    draw_ball_landings,
                    map_court_position_to_player_id,
                    get_ball_shot_frames_visual, 
-                   combine_audio_visual
+                   combine_audio_visual,
+                   convert_mp4_to_mp3
                    )
 from trackers import (PlayerTracker, BallTrackerNetTRACE, BallTracker)
 from mini_court import MiniCourt
@@ -48,13 +49,13 @@ def main():
     DRAW_STATS_BOX = True
 
     # Debugging Mode
-    DEBUG = False
+    DEBUG = True
 
     # Video to run inference on
     # Note : for video 116, change in mini_court.convert_bounding_boxes_to_mini_court_coordinates(...) ball_detections_YOLO to ball_detections
     # (leads to better results)
-    video_number = 101
-    # ground_truth_bounce = [20,50,77,106,138,168,197,230,270,301]
+    video_number = 1003
+    ground_truth_bounce = []
     print(f"Running inference on video {video_number}")
 
     # Video Paths
@@ -67,6 +68,10 @@ def main():
         READ_STUBS = True
     else:
         READ_STUBS = False
+    
+    if not os.path.exists(input_video_path_audio):
+        print(f"Converting video {video_number} to audio")
+        convert_mp4_to_mp3(input_video_path, input_video_path_audio)
         
     # Check if GPU is available
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -331,6 +336,20 @@ def main():
             ball_shots_frames_stats.append(109)
             ball_shots_frames_stats.remove(225)
             ball_shots_frames_stats.remove(321)
+            
+        if video_number == 1000:
+            ground_truth_bounce = [75]
+        
+        if video_number == 1001:
+            ground_truth_bounce = [56, 92]
+        
+        if video_number == 1002:
+            ground_truth_bounce = [22, 51, 86]
+            
+        if video_number == 1003:
+            ground_truth_bounce = [20, 50, 76, 101, 141]
+        
+        
 
         ball_shots_frames_stats = sorted(ball_shots_frames_stats)
 
@@ -535,7 +554,7 @@ def main():
     ######## DRAW OUTPUT ########
     
     # Draw Player Detection
-    output_frames = player_tracker.draw_ellipse_bboxes(video_frames, player_detections)
+    output_frames = player_tracker.draw_ellipse_bboxes(video_frames, player_detections, SELECTED_PLAYER)
 
     # Draw Ball Detection
     output_frames = write_track(video_frames, ball_detections_tracknet)
