@@ -42,8 +42,8 @@ def download_clip(url, start, end):
 
 def main():
     url = 'https://www.youtube.com/watch?v=ATI9B7ZLof8&t=6127s&ab_channel=AustralianOpenTV'
-    start = '00:00:00'
-    end = '01:00:00'
+    start = '01:20:00'     #*! First 20 munites already scraped so we can start from 20th minute (the videos are in the data folder)
+    end = '02:00:00'
     download_clip(url, start, end)
 
 if __name__ == '__main__':
