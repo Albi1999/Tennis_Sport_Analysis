@@ -9,6 +9,7 @@ from sklearn.cluster import DBSCAN
 from collections import defaultdict
 import re
 
+
 def cluster_series(arr, eps=3, min_samples=2, delay=2):
     """Cluster a series of frames and return the minimum value of each cluster with a delay adjustment."""
     if len(arr) == 0:
@@ -237,8 +238,8 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
                 bounce_frames_curr = [idx+2+i for i in range(6)]
             elif trace == 3:
                 bounce_frames_curr = [idx + 1]
-            elif trace == 5:
-                bounce_frames_curr = [idx+1+i for i in range(3)]
+            elif trace == 6:
+                bounce_frames_curr = [idx+2+i for i in range(3)]
 
             # Find the next racket hit after a bounce
             for i in ball_shots_frames_original:
@@ -268,7 +269,7 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
                 
                 # Save the flipped version (also in greyscale)
                 f = os.path.join(output_path_bounce, f"{video_n}_frame_flipped_{i}.jpg")
-                cv2.imwrite(f, cv2.flip(frame_gray, 1))
+                cv2.imwrite(f, cv2.flip(curr_frame_gray, 1))
 
         elif idx in bounce_frames_continuation or idx in ball_shots_frames:
             continue 
@@ -356,8 +357,127 @@ def splitting_data(main_dir, train_ratio = 0.75, val_ratio = 0.15, test_ratio = 
 
 """
 
+def splitting_data(main_dir, train_ratio=0.75, val_ratio=0.15, test_ratio=0.10):
+    
+    # Validate ratios
+    if abs(train_ratio + val_ratio + test_ratio - 1.0) > 0.001:
+        raise ValueError("Train, validation, and test ratios must sum to 1.0")
+    
+    # Create output directories
+    train_dir = os.path.join(main_dir, "train")
+    val_dir = os.path.join(main_dir, "val")
+    test_dir = os.path.join(main_dir, "test")
+    
+    # Create class directories for each split
+    for dir_path in [train_dir, val_dir, test_dir]:
+        os.makedirs(os.path.join(dir_path, "no_bounce"), exist_ok=True)  # class 0
+        os.makedirs(os.path.join(dir_path, "bounce"), exist_ok=True)     # class 1
 
-def splitting_data(main_dir, train_videos, val_videos, test_videos):
+    # Map class names to labels
+    class_label_map = {
+        "no_bounce": 0,
+        "bounce": 1
+    }
+    
+    # Distribution dictionary for reporting
+    distribution = {}
+    
+    # Process each class separately to ensure stratification
+    for class_name, label in class_label_map.items():
+        class_source = os.path.join(main_dir, class_name)
+        
+        # Get all image files
+        image_files = [f for f in os.listdir(class_source) 
+                      if f.lower().endswith(('.jpg'))]
+        
+        # Group files by video number
+        videos = defaultdict(list)
+        for file in image_files:
+            # Extract video number from filename (e.g., "100" from "100_frame_...")
+            try:
+                video_num = int(file.split('_')[0])
+                videos[video_num].append(file)
+            except (IndexError, ValueError):
+                print(f"Warning: Couldn't extract video number from {file}, skipping...")
+                continue
+        
+        # Get sorted list of video numbers
+        video_numbers = sorted(videos.keys())
+        
+        # Calculate total frames
+        total_frames = len(image_files)
+        target_train_frames = int(total_frames * train_ratio)
+        target_val_frames = int(total_frames * val_ratio)
+        
+        # Initialize counters
+        train_frames = 0
+        val_frames = 0
+        test_frames = 0
+        
+        # Initialize video lists for each split
+        train_videos = []
+        val_videos = []
+        test_videos = []
+        
+        # Sequential assignment of videos to sets
+        for video_num in video_numbers:
+            video_frame_count = len(videos[video_num])
+            
+            # Determine which set to assign this video to
+            if train_frames < target_train_frames or (not train_videos and not val_videos and not test_videos):
+                # Assign to train if below target or if it's the first video
+                train_videos.append(video_num)
+                train_frames += video_frame_count
+            elif val_frames < target_val_frames:
+                # Assign to validation if below target
+                val_videos.append(video_num)
+                val_frames += video_frame_count
+            else:
+                # Assign remaining to test
+                test_videos.append(video_num)
+                test_frames += video_frame_count
+        
+        # Gather files for each split
+        train_files = [f for v in train_videos for f in videos[v]]
+        val_files = [f for v in val_videos for f in videos[v]]
+        test_files = [f for v in test_videos for f in videos[v]]
+        
+        # Record distribution for this class
+        distribution[class_name] = {
+            'total': total_frames,
+            'train': len(train_files),
+            'val': len(val_files),
+            'test': len(test_files),
+            'train_videos': train_videos,
+            'val_videos': val_videos,
+            'test_videos': test_videos,
+            'label': label
+        }
+        
+        # Copy files to respective directories
+        for files, target_set in zip([train_files, val_files, test_files], ['train', 'val', 'test']):
+            target_dir = os.path.join(main_dir, target_set, class_name)
+            for file_name in files:
+                src = os.path.join(class_source, file_name)
+                dst = os.path.join(target_dir, file_name)
+                shutil.copy2(src, dst)
+    
+    # Print distribution summary
+    print(f"Dataset split complete with stratification by video. Distribution summary:")
+    for class_name, stats in distribution.items():
+        print(f"  {class_name} (Label: {stats['label']}): Total={stats['total']}, "
+              f"Train={stats['train']} ({stats['train']/stats['total']:.1%}), "
+              f"Val={stats['val']} ({stats['val']/stats['total']:.1%}), "
+              f"Test={stats['test']} ({stats['test']/stats['total']:.1%})")
+        
+        print(f"    Train videos: {sorted(stats['train_videos'])}")
+        print(f"    Val videos: {sorted(stats['val_videos'])}")
+        print(f"    Test videos: {sorted(stats['test_videos'])}")
+    
+    return train_dir, val_dir, test_dir
+
+
+def splitting_data_by_video(main_dir, train_videos, val_videos, test_videos):
     """
     Split data by manually specifying which video numbers go into which split.
     

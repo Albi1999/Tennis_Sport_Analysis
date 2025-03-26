@@ -120,7 +120,7 @@ def main():
 
     counter  = 0
     # Change here which videos to get data from
-    video_numbers = [i for i in range(1000,1015)] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
+    video_numbers = [i for i in range(1000,1020)] + [i for i in range(1021,1024)] + [i for i in range(1025,1027)] + [i for i in range(1028,1031)] + [i for i in range(1032,1041)] + [i for i in range(1042,1045)] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
 
@@ -256,7 +256,7 @@ def main():
 
         # Draw ball tracking
         if ball_tracker_method == 'tracknet':
-            trace = 5 # CHANGE TRACE HERE
+            trace = 6 # CHANGE TRACE HERE
             output_frames = write_track(video_frames, ball_detections_tracknet, ball_shots_frames, trace = trace, draw_mode= 'circle')
 
         
@@ -289,8 +289,10 @@ def main():
         # see if the trajectory ("V" shape) is still visible ; else add "None"
 
         # b
-        ball_bounce_frames_hardc = [[76],[56,92],[23,51,87], [20,49,76,101,141],[36,67,101],
-                                     [18,56,86], [14,48,80], [11,51,80,119,150,180,211,238,271,312], [16,48,79,109,139,172,201],[3, 37,68],
+        # removed 1002 bounce 54 (occluded or bad tracking)
+        # removed 1005 bounce 56
+        ball_bounce_frames_hardc = [[76],[56,92],[23,87], [20,49,76,101,141],[36,67,101],
+                                     [18,86], [14,48,80], [11,51,80,119,150,180,211,238,271,312], [16,48,79,109,139,172,201],[3, 37,68],
                                      [23, 54, 84, 127, 152, 183, 213, 243, 267, 304, 335, 384, 417, 444, 478, 504,530, 565, 592, 636, 664, 710,739, 768,805,835],
                                      [19, 58], [34, 65, 91], [34, 63, 97, 129], [26, 65, 94], [28, 56, 83, 121, 149, 182, 214, 241, 268, 296, 335, 364],
                                      [17, 49], [30, 60], [11, 46, 77], [26, 61], [149, 177, 206], [32, 65, 91, 130], [33, 59, 90, 124, 156, 186, 222, 252, 285, 313],
@@ -457,10 +459,10 @@ def main():
         counter += 1
   
         if not SCRAPING:
-            train_videos = [1000,1001,1002,1003,1004,1005,1006,1007,1008,1010]
-            val_videos = [1009,1011]
-            test_videos = [1012,1013,1014]
-            _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles', train_videos = train_videos, val_videos = val_videos, test_videos = test_videos)
+           # train_videos = [1000,1001,1002,1003,1004,1005,1006,1007,1008,1010]
+           # val_videos = [1009,1011]
+           # test_videos = [1012,1013,1014]
+            _,_,_ = splitting_data(main_dir = 'data/trajectory_model_dataset/circles', train_ratio= 0.75, val_ratio= 0.10, test_ratio = 0.15)
             break
     
 

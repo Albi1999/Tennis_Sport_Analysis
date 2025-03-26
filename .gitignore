@@ -5,7 +5,6 @@ output/output_video2.mp4/predict/input_video2.mp4
 output/output_video2.mp4/predict2/input_video2.mp4
 
 data/new_input_videos
-output/trajectory_model_videos
 
 
 data/keypoint_detection/data

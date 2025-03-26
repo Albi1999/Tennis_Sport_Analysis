@@ -434,9 +434,9 @@ if __name__ == "__main__":
     )
     
     # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=16)
-    test_loader = DataLoader(test_dataset, batch_size=16)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=32)
+    test_loader = DataLoader(test_dataset, batch_size=32)
 
     # Calculate the imbalance factor between bounce & no bounce in the train set
 
@@ -445,7 +445,7 @@ if __name__ == "__main__":
 
     # Initialize and train model
     model = BounceCNN()
-    trained_model = train_model(model, train_loader, val_loader, num_epochs = 50, factor = factor) # Comment this line if you want to skip training
+    trained_model = train_model(model, train_loader, val_loader, num_epochs = 100, factor = factor) # Comment this line if you want to skip training
     
     # Load best model
     model.load_state_dict(torch.load('models/best_bounce_model.pth'))
