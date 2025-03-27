@@ -40,6 +40,7 @@ def main():
 
 
     ######## CONFIG ########
+    TRACE = 6 # Set trace to same amount that BounceCNN was trained on (currently : 6)
     
     # Select the player
     SELECTED_PLAYER = 'Lower' # 'Upper' or 'Lower'
@@ -49,12 +50,12 @@ def main():
     DRAW_STATS_BOX = True
 
     # Debugging Mode
-    DEBUG = True
+    DEBUG = False
 
     # Video to run inference on
     # Note : for video 116, change in mini_court.convert_bounding_boxes_to_mini_court_coordinates(...) ball_detections_YOLO to ball_detections
     # (leads to better results)
-    video_number = 1003
+    video_number = 102
     ground_truth_bounce = []
     print(f"Running inference on video {video_number}")
 
@@ -85,7 +86,6 @@ def main():
     # YOLO
     ball_tracker_yolo = BallTracker(model_path = 'models/yolo11best.pt')
     # TrackNet
-
     ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
     saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=device)
     ball_tracker_TRACKNET.load_state_dict(saved_state_dict['model_state'])
@@ -185,10 +185,10 @@ def main():
     output_frames_black = write_track(video_frames_black, ball_detections_tracknet, ball_shots_frames, trace = 10, draw_mode= 'circle')
 
     # Draw Keypoints (and lines) of the court into black video 
-    output_frames_black = courtline_detector.draw_keypoints_on_video(output_frames_black, refined_keypoints)
+   # output_frames_black = courtline_detector.draw_keypoints_on_video(output_frames_black, refined_keypoints)
 
     _ = scraping_data_for_inference(video_n= video_number, output_path = 'data_inference', input_frames = output_frames_black,
-                                 ball_shots_frames = ball_shots_frames , trace = 10, ball_detections = ball_detections_tracknet)
+                                 ball_shots_frames = ball_shots_frames , trace = TRACE, ball_detections = ball_detections_tracknet)
 
     # Instantiate Bounce Model
     model_bounce = BounceCNN()
