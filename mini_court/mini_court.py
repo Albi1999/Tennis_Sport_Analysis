@@ -26,7 +26,7 @@ from utils import (
 class MiniCourt():
     def __init__(self,frame):
         self.drawing_rectangle_width = 250          # Width of the mini court in pixels (depends on the image size)
-        self.drawing_rectangle_height = 500         # Height of the mini court in pixels (depends on the image size)
+        self.drawing_rectangle_height = 550         # Height of the mini court in pixels (depends on the image size)
         self.buffer = 70                            # Distance from the right and top of the frame to the mini court
         self.padding_court= 30                      # Padding from the mini court to the court (depends on the image size)
 
@@ -115,6 +115,8 @@ class MiniCourt():
         drawing_key_points[27] = drawing_key_points[21] 
 
         self.drawing_key_points=drawing_key_points
+        self.net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5])/2)
+
 
     def set_court_lines(self):
         '''Set the lines of the mini court connecting the key points'''
@@ -344,7 +346,7 @@ class MiniCourt():
     
     def draw_player_distance_heatmap(self, frames, player_mini_court_detections, color_map=cv2.COLORMAP_HOT, selected_player='Lower', alpha=0.6):
         """
-        Draw a heatmap representing player distance on the mini court.
+        Draw a heatmap representing opponent player distance on the mini court.
         
         Args:
             frames (list): List of frames to draw the heatmap on
@@ -400,7 +402,7 @@ class MiniCourt():
                 x, y = position
                 
                 # Check if the player is inside or near the selected court area
-                if (y >= court_y_start - 50 and y <= court_y_end + 50):
+                if (y >= court_y_start - 100 and y <= court_y_end + 100):
                     # Adjust player coordinates to be relative to the heatmap
                     rel_x = int(x) - court_left_x
                     rel_y = int(y) - court_y_start
@@ -429,7 +431,6 @@ class MiniCourt():
                     # Update the existing heatmap - take the maximum values
                     heatmap_img = np.maximum(heatmap_img, player_img)
                     
-                # Add ply
             
             # Apply the colormap to the final heatmap
             colored_heatmap = cv2.applyColorMap(heatmap_img, color_map)
@@ -446,3 +447,21 @@ class MiniCourt():
             output_frames.append(heatmap_frame)
         
         return output_frames
+    
+    def draw_ball_landing_heatmap(self, frames, ball_landing_frames, player_mini_court_detections, trace=6, color_map=cv2.COLORMAP_HOT, selected_player='Lower', alpha=0.6):
+        """
+        Draw a heatmap representing ball landing area on the opponent mini court at each shot of the selected player.
+        
+        Args:
+            frames (list): List of frames to draw the heatmap on
+            ball_landing_frames (list): List of frames with ball landing positions
+            player_mini_court_detections (list): List of dictionaries containing player positions in mini court
+            trace (int): Number of frames to trace the ball landing positions
+            color_map: OpenCV colormap to use (default: cv2.COLORMAP_HOT)
+            selected_player (str): Which part of the court to show - 'Lower' or 'Upper'
+            alpha: Transparency level for the heatmap overlay (default: 0.6)
+        
+        Returns:
+            list: List of frames with heatmap applied
+        """
+        raise NotImplementedError("This function is not implemented yet.")
