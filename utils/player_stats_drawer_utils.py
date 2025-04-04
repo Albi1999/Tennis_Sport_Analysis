@@ -48,10 +48,17 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             cv2.putText(frame, text, (start_x+80, start_y+30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         else:
+            # Determine the color based on the selected player
+            if selected_player == 'Upper':
+                player_color = (255, 255, 0)  # Cyan
+            else:
+                player_color = (255, 0, 255)  # Magenta
+        
             # Only show selected player
             text = f"{selected_player} Player Stats"
             cv2.putText(frame, text, (start_x+50, start_y+30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, player_color, 2)
+
             
         # Add stats rows
         if show_both_players:

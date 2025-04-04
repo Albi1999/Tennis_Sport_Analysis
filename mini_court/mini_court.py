@@ -147,10 +147,10 @@ class MiniCourt():
             end_point = (int(self.drawing_key_points[line[1]*2]), int(self.drawing_key_points[line[1]*2+1]))
             cv2.line(frame, start_point, end_point, (255, 255, 255), 2)
 
-        # Net (Purple)
+        # Net (Blue)
         net_start_point = (self.drawing_key_points[0], int((self.drawing_key_points[1] + self.drawing_key_points[5])/2))
         net_end_point = (self.drawing_key_points[2], int((self.drawing_key_points[1] + self.drawing_key_points[5])/2))
-        cv2.line(frame, net_start_point, net_end_point, (255, 0, 255), 2)
+        cv2.line(frame, net_start_point, net_end_point, (255, 0, 0), 2)
 
         return frame
 
@@ -332,16 +332,170 @@ class MiniCourt():
         
         return output_player_boxes, output_ball_boxes
     
-    def draw_points_on_mini_court(self,frames, positions, color=(255,255,0)):
-        '''Draw points on the mini court'''
-        for frame_num, frame in enumerate(frames):
-            for _, position in positions[frame_num].items():
-                x,y = position
-                x= int(x)
-                y= int(y)
-                cv2.circle(frame, (x,y), 5, color, -1)
-        return frames
+    def draw_points_on_mini_court(self, frames, positions, object_type='ball'):
+        """
+        Draw points on the mini court with different colors for upper and lower players.
+        
+        Args:
+            frames (list): List of frames to draw the points on
+            positions (list): List of dictionaries containing player positions in mini court
+            color (tuple): Color for the points (BGR format) - used for non-player objects
+            object_type (str): Type of object ('player' or 'ball')
+        
+        Returns:
+            list: List of frames with points applied
+        """
+        output_frames = frames.copy()
+        
+        # Define colors for players
+        upper_player_color = (255, 255, 0)  # Cyan in BGR
+        lower_player_color = (255, 0, 255)  # Magenta in BGR
+        
+        # Get the net y-coordinate (dividing line between upper and lower court)
+        net_y = self.net_y
+        
+        if object_type == 'player':
+            for frame_num, frame in enumerate(output_frames):
+                for player_id, position in positions[frame_num].items():
+                    x, y = position
+                    x = int(x)
+                    y = int(y)
+                    
+                    # Determine player color based on position
+                    if y < net_y:
+                        # Player is in upper half of court
+                        point_color = upper_player_color
+                    else:
+                        # Player is in lower half of court
+                        point_color = lower_player_color
+                        
+                    cv2.circle(frame, (x, y), 5, point_color, -1)
+        elif object_type == 'ball':
+            # For ball, use the specified color
+            for frame_num, frame in enumerate(output_frames):
+                for _, position in positions[frame_num].items():
+                    x, y = position
+                    x = int(x)
+                    y = int(y)
+                    cv2.circle(frame, (x, y), 5, (0,255,255), -1)
+        else:
+            raise ValueError("Invalid object type. Use 'player' or 'ball'.")
+        
+        return output_frames
+    
+    def draw_shot_trajectories(self, frames, player_mini_court_detections, ball_mini_court_detections,
+                            ball_landing_frames, ball_shots_frames, serve_player,
+                            line_color=(0, 255, 255)):
+        """
+        Draw animated ball trajectories from alternating players to landing positions.
+        Trajectories gradually appear as frames progress between shot and landing.
+        
+        Args:
+            frames (list): List of frames to draw the trajectories on
+            player_mini_court_detections (list): List of dictionaries containing player positions in mini court
+            ball_mini_court_detections (list): List of dictionaries containing ball positions in mini court
+            ball_landing_frames (list): List of frames where the ball lands
+            ball_shots_frames (list): List of frames where players hit the ball
+            serve_player (str): Which player serves first - 'Lower' or 'Upper'
+            line_color (tuple): Color for trajectory line (BGR format)
+
+        Returns:
+            list: List of frames with trajectories applied
+        """
+        output_frames = frames.copy()
+        
+        # Get player IDs based on court position
+        player_ids = {}
+        if len(player_mini_court_detections) > 0 and len(player_mini_court_detections[0]) >= 2:
+            # Get the first frame with both players
+            for frame_idx, players in enumerate(player_mini_court_detections):
+                if len(players) >= 2:
+                    player_y_values = {}
+                    for player_id, pos in players.items():
+                        player_y_values[player_id] = pos[1]
+                    
+                    # Sort by Y value (higher Y is lower court)
+                    sorted_players = sorted(player_y_values.items(), key=lambda x: x[1])
+                    
+                    # First player (smaller Y) is Upper, second is Lower
+                    if len(sorted_players) >= 2:
+                        player_ids['Upper'] = sorted_players[0][0]
+                        player_ids['Lower'] = sorted_players[1][0]
+                        break
+        
+        # Set initial player based on serve_player
+        current_player = serve_player
+        
+        # Ensure we have valid data to draw trajectories
+        if (not ball_shots_frames or not ball_landing_frames or
+            len(ball_shots_frames) == 0 or len(ball_landing_frames) == 0 or
+            len(player_ids) < 2):
+            return output_frames
+        
+        
+        # Map hit frames to nearest landing frames
+        hit_to_landing = {}
+        for hit_frame in sorted(ball_shots_frames):
+            # Find the next landing after this hit
+            next_landing = next((lf for lf in ball_landing_frames if lf > hit_frame), None)
+            if next_landing:
+                hit_to_landing[hit_frame] = next_landing
+        
+        # Process each trajectory in chronological order
+        for hit_frame, landing_frame in sorted(hit_to_landing.items()):
+            # Get current player ID
+            current_player_id = player_ids.get(current_player)
             
+            # Skip if player ID not found
+            if current_player_id is None:
+                continue
+            
+            # Get player position at hit frame
+            if current_player_id in player_mini_court_detections[hit_frame]:
+                player_pos = player_mini_court_detections[hit_frame][current_player_id]
+                player_x, player_y = int(player_pos[0]), int(player_pos[1])
+                
+                # Get ball landing position
+                if 1 in ball_mini_court_detections[landing_frame]:
+                    landing_pos = ball_mini_court_detections[landing_frame][1]
+                    landing_x, landing_y = int(landing_pos[0]), int(landing_pos[1])
+                    
+                    # Draw the gradually appearing trajectory
+                    for frame_idx in range(hit_frame, min(landing_frame + 1, len(output_frames))):
+                        # Calculate how much of the trajectory to draw (0.0 to 1.0)
+                        if landing_frame == hit_frame:
+                            progress = 1.0
+                        else:
+                            progress = (frame_idx - hit_frame) / (landing_frame - hit_frame)
+                        
+                        # Calculate the endpoint of the partial trajectory
+                        current_end_x = int(player_x + (landing_x - player_x) * progress)
+                        current_end_y = int(player_y + (landing_y - player_y) * progress)
+                        
+                        # Create dotted line effect
+                        line_length = np.sqrt((current_end_x - player_x)**2 + (current_end_y - player_y)**2)
+                        num_segments = max(2, int(line_length / 10))  # At least 2 segments
+                        
+                        # Draw each segment
+                        for i in range(num_segments):
+                            t = i / (num_segments - 1)
+                            dot_x = int(player_x + t * (current_end_x - player_x))
+                            dot_y = int(player_y + t * (current_end_y - player_y))
+                            
+                            # Draw a circle at this position (only every other segment for dotted effect)
+                            if i % 2 == 0:
+                                dot_size = max(1, int(3 * progress))
+                                cv2.circle(output_frames[frame_idx], (dot_x, dot_y), dot_size, line_color, -1)
+                        
+                        # Draw the end point when we're near the end
+                        if progress > 0.85:
+                            cv2.circle(output_frames[frame_idx], (landing_x, landing_y), 5, line_color, -1)
+            
+            # Switch player for next shot
+            current_player = 'Upper' if current_player == 'Lower' else 'Lower'
+        
+        return output_frames
+                
     
     
     def draw_player_distance_heatmap(self, frames, player_mini_court_detections, color_map=cv2.COLORMAP_HOT, selected_player='Lower', alpha=0.6):
@@ -395,7 +549,7 @@ class MiniCourt():
             player_positions = player_mini_court_detections[frame_num]
             
             # Create a blank image for the heatmap (same size as the court section)
-            heatmap_img = np.zeros((court_height, court_width, 3), dtype=np.uint8)
+            player_img = np.zeros((court_height, court_width, 3), dtype=np.uint8)
             
             # Process each player position
             for player_id, position in player_positions.items():
@@ -419,21 +573,18 @@ class MiniCourt():
                     # Normalize distance to range 0-255
                     player_intensity = 255 * player_distance / max_distance
                     
-                    # Create player heatmap image
-                    player_img = np.zeros_like(heatmap_img)
+
                     player_img[:, :, 0] = player_intensity
                     player_img[:, :, 1] = player_intensity
                     player_img[:, :, 2] = player_intensity
                     
                     #TODO: Convert to heatmap values (0-1) then back to pixel values and return the heatmap image
                     #player_heatmap_frame = convert_to_heatmap_values(player_img)
-                    
-                    # Update the existing heatmap - take the maximum values
-                    heatmap_img = np.maximum(heatmap_img, player_img)
+
                     
             
             # Apply the colormap to the final heatmap
-            colored_heatmap = cv2.applyColorMap(heatmap_img, color_map)
+            colored_heatmap = cv2.applyColorMap(player_img, color_map)
             
             # Create a temporary frame with the heatmap region
             overlay = heatmap_frame.copy()
@@ -448,20 +599,122 @@ class MiniCourt():
         
         return output_frames
     
-    def draw_ball_landing_heatmap(self, frames, ball_landing_frames, player_mini_court_detections, trace=6, color_map=cv2.COLORMAP_HOT, selected_player='Lower', alpha=0.6):
+    def draw_ball_landing_heatmap(self, frames, player_balls_frames, ball_mini_court_detections, ball_shots_frames_upper, ball_shots_frames_lower, selected_player, radius=20, color_map=cv2.COLORMAP_HOT, alpha=0.6):
         """
         Draw a heatmap representing ball landing area on the opponent mini court at each shot of the selected player.
         
         Args:
             frames (list): List of frames to draw the heatmap on
-            ball_landing_frames (list): List of frames with ball landing positions
-            player_mini_court_detections (list): List of dictionaries containing player positions in mini court
-            trace (int): Number of frames to trace the ball landing positions
-            color_map: OpenCV colormap to use (default: cv2.COLORMAP_HOT)
+            player_balls_frames (list): List of frames with ball landing positions in the opposite court 
+            ball_mini_court_detections (list): List of dictionaries containing ball positions in mini court
+            ball_shots_frames_upper (list): List of frames where upper player hits the ball
+            ball_shots_frames_lower (list): List of frames where lower player hits the ball
             selected_player (str): Which part of the court to show - 'Lower' or 'Upper'
+            radius (int): Radius of the ball landing area
+            color_map: OpenCV colormap to use (default: cv2.COLORMAP_HOT)
             alpha: Transparency level for the heatmap overlay (default: 0.6)
         
         Returns:
             list: List of frames with heatmap applied
         """
-        raise NotImplementedError("This function is not implemented yet.")
+        output_frames = []
+
+        # Get the net y-coordinate (dividing line between upper and lower court)
+        net_y = int((self.drawing_key_points[1] + self.drawing_key_points[5]) / 2)
+
+        # Use actual tennis court boundaries from keypoints
+        court_left_x = int(self.drawing_key_points[0])  # Left boundary from top-left corner
+        court_right_x = int(self.drawing_key_points[2])  # Right boundary from top-right corner
+        court_top_y = int(self.drawing_key_points[1])    # Top boundary from top-left corner
+        court_bottom_y = int(self.drawing_key_points[5])  # Bottom boundary from bottom-left corner
+
+        # Define court region based on selected_player
+        if selected_player == 'Lower':
+            # If Lower selected, show heatmap in Upper court
+            court_y_start = court_top_y
+            court_y_end = net_y
+            
+            # Draw heatmap from the Lower player shots to the Upper player shots
+            shots_starting_frames = ball_shots_frames_lower
+            shots_ending_frames = ball_shots_frames_upper
+        else:
+            # If Upper selected, show heatmap in Lower court
+            court_y_start = net_y
+            court_y_end = court_bottom_y
+            
+            # Draw heatmap from the Upper player shots to the Lower player shots
+            shots_starting_frames = ball_shots_frames_upper
+            shots_ending_frames = ball_shots_frames_lower
+
+        # Court dimensions
+        court_width = court_right_x - court_left_x
+        court_height = court_y_end - court_y_start
+
+        # Maximum possible distance for normalization
+        max_distance = np.sqrt(court_width**2 + court_height**2)
+
+        for frame_num, frame in enumerate(frames):
+            # Create a copy of the frame
+            heatmap_frame = frame.copy()
+
+            # Initialize a blank heatmap image
+            heatmap_img = np.zeros((court_height, court_width, 3), dtype=np.uint8)
+
+            # Check if the current frame is a ball landing frame
+            if frame_num in player_balls_frames:
+                
+                # Get ball positions for this frame
+                ball_positions = ball_mini_court_detections[frame_num]
+                
+                for _, position in ball_positions.items():
+                    # Select the ball coordinates
+                    x, y = position
+
+                    # Check if the ball is inside or near the selected court area
+                    if court_y_start <= y <= court_y_end:
+                        # Adjust ball coordinates to be relative to the heatmap
+                        rel_x = int(x) - court_left_x
+                        rel_y = int(y) - court_y_start
+
+                        # Create coordinate grids for the court area
+                        y_coords, x_coords = np.ogrid[:court_height, :court_width]
+
+                        # Calculate Euclidean distance using vectorization
+                        ball_distance = np.sqrt((x_coords - rel_x)**2 + (y_coords - rel_y)**2)
+
+                        # Clip to max distance
+                        ball_distance = np.clip(ball_distance, 0, max_distance)
+
+                        # Normalize distance to range 0-255
+                        ball_intensity = 255 * ball_distance / max_distance
+
+                        # Create a mask for the ball's distance using ball landing area
+                        distance_mask = ball_distance >= radius
+
+                        # Update the heatmap image with the ball intensity
+                        heatmap_img[:, :, 0] = ball_intensity
+                        heatmap_img[:, :, 1] = ball_intensity
+                        heatmap_img[:, :, 2] = ball_intensity
+
+                        # Invert the intensity
+                        heatmap_img = 255 - heatmap_img
+
+                        # Apply the mask to the ball image
+                        heatmap_img[distance_mask] = 0
+
+
+            # Apply the colormap to the final heatmap
+            colored_heatmap = cv2.applyColorMap(heatmap_img, color_map)
+
+            # Create a temporary frame with the heatmap region
+            overlay = heatmap_frame.copy()
+
+            # Place the colored heatmap onto the selected court region
+            overlay[court_y_start:court_y_end, court_left_x:court_right_x] = colored_heatmap
+
+            # Blend the overlay with the original frame
+            cv2.addWeighted(overlay, alpha, heatmap_frame, 1 - alpha, 0, heatmap_frame)
+
+            output_frames.append(heatmap_frame)
+
+        return output_frames

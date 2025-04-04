@@ -44,7 +44,7 @@ def main():
     TRACE = 6 # Set trace to same amount that BounceCNN was trained on (currently : 6)
     
     # Select the player
-    SELECTED_PLAYER = 'Upper' # 'Upper' or 'Lower'
+    SELECTED_PLAYER = 'Lower' # 'Upper' or 'Lower'
     
     # Draw Options
     DRAW_MINI_COURT = True
@@ -56,7 +56,7 @@ def main():
     # Video to run inference on
     # Note : for video 116, change in mini_court.convert_bounding_boxes_to_mini_court_coordinates(...) ball_detections_YOLO to ball_detections
     # (leads to better results)
-    video_number = 108
+    video_number = 101
     print(f"Running inference on video {video_number}")
     
     # Insert ground truth values for the racket hits and ball landings for best accuracy
@@ -361,17 +361,22 @@ def main():
             ground_truth_bounce = [20, 50, 76, 101, 141]
             
         ball_landing_frames_stats = ground_truth_bounce.copy()
-    
+        ball_shots_frames_stats = sorted(ball_shots_frames_stats)
  
         # Get the racket hit frames for the player
-        ball_shots_frames_stats = sorted(ball_shots_frames_stats) if len(ground_truth_racket_hits) > 0 else ball_shots_frames_stats
         ball_shots_frames_upper, ball_shots_frames_lower = filter_ball_detections_by_player(ball_shots_frames_stats, ball_mini_court_detections, mini_court)
         print(f"Ball Shots Upper Player: {ball_shots_frames_upper}")
         print(f"Ball Shots Lower Player: {ball_shots_frames_lower}")
+        if ball_shots_frames_upper[0] < ball_shots_frames_lower[0]:
+            serve_player = 'Upper'
+        else:
+            serve_player = 'Lower'
+        print(f"The Player who serves is: {serve_player}")
 
-        # Print the ball shots frames to check what we have as input for the stats
-        print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
-        print(f"Ground Truth Bounce Frames : {ground_truth_bounce}")
+        # Print the ground truth values for the racket hits and ball landings for debugging purposes
+        if len(ball_shots_frames_stats) > 0 and len(ground_truth_bounce) > 0:
+            print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
+            print(f"Ground Truth Bounce Frames : {ground_truth_bounce}")
 
     ######## MATCH STATS ########
 
@@ -594,27 +599,15 @@ def main():
     # Draw Mini Court
     if DRAW_MINI_COURT:
         output_frames = mini_court.draw_mini_court(output_frames)
-        '''
-        output_frames = mini_court.draw_ball_landing_heatmap(
-                output_frames,
-                player_mini_court_detections,
-                ball_mini_court_detections,
-                ball_landing_frames,
-                player_balls_frames,
-                sigma=15
-                )
-        '''
-        output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections, selected_player=SELECTED_PLAYER)
-    #    output_frames = mini_court.draw_ball_landing_points(output_frames, ball_mini_court_detections, ball_landing_frames)
-        ''' 
-        output_frames = mini_court.draw_shot_trajectories(output_frames, 
-                                            player_mini_court_detections, 
-                                            ball_mini_court_detections, 
-                                            ball_landing_frames,
-                                            player_balls_frames)     
-        '''
-        output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
-        output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
+   
+        output_frames = mini_court.draw_ball_landing_heatmap(output_frames, player_balls_frames, ball_mini_court_detections, ball_shots_frames_upper, ball_shots_frames_lower, selected_player=SELECTED_PLAYER)
+
+        #output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections, selected_player=SELECTED_PLAYER)
+
+        output_frames = mini_court.draw_shot_trajectories(output_frames, player_mini_court_detections, ball_mini_court_detections, ball_landing_frames_stats, ball_shots_frames_stats, serve_player=serve_player)     
+
+        output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections,object_type='player')
+        #output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, object_type='ball')
 
     # Draw player stats box
     if DRAW_STATS_BOX:

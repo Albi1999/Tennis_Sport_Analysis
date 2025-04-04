@@ -262,7 +262,7 @@ class PlayerTracker:
         output_video_frames = []
         
         # Create an EllipseAnnotator object with custom colors
-        color_palette = ['#00ffff', '#800080'] # Cyan and Purple
+        color_palette = ['#00ffff', '#ff00ff'] # Cyan and Magenta
         color_idx = 0 if player == 'Upper' else 1
         ellipse_annotator = sv.EllipseAnnotator(color=sv.ColorPalette.from_hex(color_palette))
         triangle_annotator = sv.TriangleAnnotator(color=sv.Color.from_hex(color_palette[color_idx]))
