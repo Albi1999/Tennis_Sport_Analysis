@@ -387,8 +387,9 @@ class MiniCourt():
                             ball_landing_frames, ball_shots_frames, serve_player,
                             line_color=(0, 255, 255)):
         """
-        Draw animated ball trajectories from alternating players to landing positions.
-        Trajectories gradually appear as frames progress between shot and landing.
+        Draw animated ball trajectories from players to landing positions and continue after bounce to next landing.
+        Trajectories gradually appear as frames progress between hits, landings and next hits/landings.
+        When a new shot is hit, previous complete trajectories are removed.
         
         Args:
             frames (list): List of frames to draw the trajectories on
@@ -432,67 +433,219 @@ class MiniCourt():
             len(player_ids) < 2):
             return output_frames
         
+        # Organize all events chronologically
+        all_events = []
         
-        # Map hit frames to nearest landing frames
-        hit_to_landing = {}
-        for hit_frame in sorted(ball_shots_frames):
-            # Find the next landing after this hit
-            next_landing = next((lf for lf in ball_landing_frames if lf > hit_frame), None)
-            if next_landing:
-                hit_to_landing[hit_frame] = next_landing
+        # Add hit events
+        for hit_frame in ball_shots_frames:
+            all_events.append((hit_frame, 'hit'))
         
-        # Process each trajectory in chronological order
-        for hit_frame, landing_frame in sorted(hit_to_landing.items()):
-            # Get current player ID
-            current_player_id = player_ids.get(current_player)
-            
-            # Skip if player ID not found
-            if current_player_id is None:
+        # Add landing events
+        for landing_frame in ball_landing_frames:
+            all_events.append((landing_frame, 'landing'))
+        
+        # Sort events chronologically
+        all_events.sort(key=lambda x: x[0])
+        
+        # Create a list of trajectories to draw
+        trajectories = []
+        
+        # Starting point is the first hit
+        current_start_frame = None
+        current_start_type = None
+        
+        # Process all events to create trajectory segments
+        for i, (frame, event_type) in enumerate(all_events):
+            # Skip if this is the first event (need a starting point)
+            if current_start_frame is None:
+                current_start_frame = frame
+                current_start_type = event_type
                 continue
-            
-            # Get player position at hit frame
-            if current_player_id in player_mini_court_detections[hit_frame]:
-                player_pos = player_mini_court_detections[hit_frame][current_player_id]
-                player_x, player_y = int(player_pos[0]), int(player_pos[1])
                 
-                # Get ball landing position
-                if 1 in ball_mini_court_detections[landing_frame]:
-                    landing_pos = ball_mini_court_detections[landing_frame][1]
-                    landing_x, landing_y = int(landing_pos[0]), int(landing_pos[1])
-                    
-                    # Draw the gradually appearing trajectory
-                    for frame_idx in range(hit_frame, min(landing_frame + 1, len(output_frames))):
-                        # Calculate how much of the trajectory to draw (0.0 to 1.0)
-                        if landing_frame == hit_frame:
-                            progress = 1.0
-                        else:
-                            progress = (frame_idx - hit_frame) / (landing_frame - hit_frame)
-                        
-                        # Calculate the endpoint of the partial trajectory
-                        current_end_x = int(player_x + (landing_x - player_x) * progress)
-                        current_end_y = int(player_y + (landing_y - player_y) * progress)
-                        
-                        # Create dotted line effect
-                        line_length = np.sqrt((current_end_x - player_x)**2 + (current_end_y - player_y)**2)
-                        num_segments = max(2, int(line_length / 10))  # At least 2 segments
-                        
-                        # Draw each segment
-                        for i in range(num_segments):
-                            t = i / (num_segments - 1)
-                            dot_x = int(player_x + t * (current_end_x - player_x))
-                            dot_y = int(player_y + t * (current_end_y - player_y))
-                            
-                            # Draw a circle at this position (only every other segment for dotted effect)
-                            if i % 2 == 0:
-                                dot_size = max(1, int(3 * progress))
-                                cv2.circle(output_frames[frame_idx], (dot_x, dot_y), dot_size, line_color, -1)
-                        
-                        # Draw the end point when we're near the end
-                        if progress > 0.85:
-                            cv2.circle(output_frames[frame_idx], (landing_x, landing_y), 5, line_color, -1)
+            # We have a start and end point for a trajectory segment
+            trajectories.append({
+                'start_frame': current_start_frame,
+                'start_type': current_start_type,
+                'end_frame': frame,
+                'end_type': event_type
+            })
             
-            # Switch player for next shot
-            current_player = 'Upper' if current_player == 'Lower' else 'Lower'
+            # Update start for next segment
+            current_start_frame = frame
+            current_start_type = event_type
+        
+        # Keep track of previous trajectory points for continuous tracing
+        prev_start_pos = None
+        prev_end_pos = None
+        
+        # Draw yellow dots at bounce points
+        for landing_frame in ball_landing_frames:
+            if landing_frame < len(output_frames) and 1 in ball_mini_court_detections[landing_frame]:
+                ball_pos = ball_mini_court_detections[landing_frame][1]
+                x, y = int(ball_pos[0]), int(ball_pos[1])
+                # Draw a larger yellow dot at each bounce point
+                cv2.circle(output_frames[landing_frame], (x, y), 8, (0, 255, 255), -1)
+        
+        # Dictionary to store completed trajectory segments for each frame
+        completed_trajectories = {i: [] for i in range(len(output_frames))}
+        
+        # Track the latest hit frame for clearing previous trajectories
+        latest_hit_frame = -1
+        
+        # Process each trajectory
+        for trajectory_idx, trajectory in enumerate(trajectories):
+            start_frame = trajectory['start_frame']
+            end_frame = trajectory['end_frame']
+            start_type = trajectory['start_type']
+            end_type = trajectory['end_type']
+            
+            # If this is a new hit, clear the previous trajectories
+            if start_type == 'hit' and start_frame > latest_hit_frame:
+                latest_hit_frame = start_frame
+                # Clear previous trajectories from this point onwards
+                for frame_idx in range(start_frame, len(output_frames)):
+                    completed_trajectories[frame_idx] = []
+            
+            # Get starting position based on event type
+            if start_type == 'hit':
+                # If hit, get player position
+                current_player_id = player_ids.get(current_player)
+                if current_player_id not in player_mini_court_detections[start_frame]:
+                    # Switch player for next segment if needed
+                    if end_type == 'hit':
+                        current_player = 'Upper' if current_player == 'Lower' else 'Lower'
+                    continue
+                
+                start_pos = player_mini_court_detections[start_frame][current_player_id]
+            else:  # landing
+                # If landing, get ball position
+                if 1 not in ball_mini_court_detections[start_frame]:
+                    continue
+                start_pos = ball_mini_court_detections[start_frame][1]
+            
+            # Get ending position based on event type
+            if end_type == 'hit':
+                # Switch player since ball is being hit by other player
+                current_player = 'Upper' if current_player == 'Lower' else 'Lower'
+                current_player_id = player_ids.get(current_player)
+                
+                if current_player_id not in player_mini_court_detections[end_frame]:
+                    continue
+                
+                end_pos = player_mini_court_detections[end_frame][current_player_id]
+            else:  # landing
+                if 1 not in ball_mini_court_detections[end_frame]:
+                    continue
+                end_pos = ball_mini_court_detections[end_frame][1]
+            
+            # If this is a trajectory after a bounce, calculate a natural bounce trajectory
+            # instead of drawing directly to the player
+            if start_type == 'landing' and prev_start_pos is not None and prev_end_pos is not None:
+                # Calculate the direction vector of the previous trajectory
+                prev_direction_x = prev_end_pos[0] - prev_start_pos[0]
+                prev_direction_y = prev_end_pos[1] - prev_start_pos[1]
+                
+                # Scale down the direction vector to create a bounce effect
+                bounce_direction_x = prev_direction_x * 0.25
+                bounce_direction_y = prev_direction_y * 0.25
+                
+                # Calculate a virtual end point that creates a realistic arc
+                virtual_end_x = start_pos[0] + bounce_direction_x
+                virtual_end_y = start_pos[1] + bounce_direction_y
+                
+                # Use this virtual end point for a natural bounce trajectory
+                # instead of pointing directly to the player
+                end_pos = (virtual_end_x, virtual_end_y)
+            
+            start_x, start_y = int(start_pos[0]), int(start_pos[1])
+            end_x, end_y = int(end_pos[0]), int(end_pos[1])
+            
+            # Save positions for next trajectory segment
+            prev_start_pos = start_pos
+            prev_end_pos = end_pos
+            
+            # Draw the gradually appearing trajectory
+            for frame_idx in range(start_frame, min(end_frame + 1, len(output_frames))):
+                # Calculate how much of the trajectory to draw (0.0 to 1.0)
+                if end_frame == start_frame:
+                    progress = 1.0
+                else:
+                    progress = (frame_idx - start_frame) / (end_frame - start_frame)
+                
+                # Calculate the endpoint of the partial trajectory
+                current_end_x = int(start_x + (end_x - start_x) * progress)
+                current_end_y = int(start_y + (end_y - start_y) * progress)
+                
+                # Add this segment to the current frame's completed trajectories once it's fully drawn
+                if progress == 1.0:
+                    completed_trajectories[frame_idx].append({
+                        'start': (start_x, start_y),
+                        'end': (current_end_x, current_end_y),
+                        'is_hit': start_type == 'hit'
+                    })
+                
+                # Draw all completed trajectories for this frame first
+                for traj in completed_trajectories[frame_idx]:
+                    traj_start_x, traj_start_y = traj['start']
+                    traj_end_x, traj_end_y = traj['end']
+                    
+                    # Draw full trajectory as dotted line
+                    line_length = np.sqrt((traj_end_x - traj_start_x)**2 + (traj_end_y - traj_start_y)**2)
+                    num_segments = max(2, int(line_length / 10))  # At least 2 segments
+                    
+                    # Draw each segment
+                    for i in range(num_segments):
+                        t = i / (num_segments - 1)
+                        dot_x = int(traj_start_x + t * (traj_end_x - traj_start_x))
+                        dot_y = int(traj_start_y + t * (traj_end_y - traj_start_y))
+                        
+                        # Draw a circle at this position (only every other segment for dotted effect)
+                        if i % 2 == 0:
+                            cv2.circle(output_frames[frame_idx], (dot_x, dot_y), 3, line_color, -1)
+                    
+                    # Draw endpoint with bigger circle if this was a hit
+                    if traj['is_hit']:
+                        cv2.circle(output_frames[frame_idx], (traj_end_x, traj_end_y), 5, line_color, -1)
+                
+                # Now draw the current trajectory segment that's being animated
+                # Create dotted line effect
+                line_length = np.sqrt((current_end_x - start_x)**2 + (current_end_y - start_y)**2)
+                num_segments = max(2, int(line_length / 10))  # At least 2 segments
+                
+                # Draw each segment
+                for i in range(num_segments):
+                    t = i / (num_segments - 1)
+                    dot_x = int(start_x + t * (current_end_x - start_x))
+                    dot_y = int(start_y + t * (current_end_y - start_y))
+                    
+                    # Draw a circle at this position (only every other segment for dotted effect)
+                    if i % 2 == 0:
+                        dot_size = max(1, int(3 * progress))
+                        cv2.circle(output_frames[frame_idx], (dot_x, dot_y), dot_size, line_color, -1)
+                
+                # Draw the end point when we're near the end
+                if progress > 0.85 and start_type == 'hit':
+                    cv2.circle(output_frames[frame_idx], (end_x, end_y), 5, line_color, -1)
+                    
+            # After completing a trajectory, add it to all future frames until next hit
+            for future_frame in range(end_frame + 1, len(output_frames)):
+                # Break if we reach a new hit frame that's not directly connected to this trajectory
+                if future_frame > end_frame and future_frame in ball_shots_frames and not (end_type == 'landing' and future_frame == ball_shots_frames[0]):
+                    break
+                    
+                completed_trajectories[future_frame].append({
+                    'start': (start_x, start_y),
+                    'end': (end_x, end_y),
+                    'is_hit': start_type == 'hit'
+                })
+            
+            # Only switch player after hit-landing-hit sequence
+            if start_type == 'hit' and end_type == 'landing':
+                # Don't switch player here, wait for next hit
+                pass
+            elif start_type == 'landing' and end_type == 'hit':
+                # Don't need to switch here as we already did above
+                pass
         
         return output_frames
                 
