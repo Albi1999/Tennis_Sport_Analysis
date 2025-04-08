@@ -392,7 +392,6 @@ def main():
         'player_1_last_player_speed': 0,
         'player_1_hits_counter': 0,
         'player_1_distance_covered': 0,
-        'player_1_score_probability': 0,
 
         #player 2 stats
         'player_2_number_of_shots': 0,
@@ -404,14 +403,10 @@ def main():
         'player_2_last_player_speed': 0,
         'player_2_hits_counter': 0,
         'player_2_distance_covered': 0,
-        'player_2_score_probability': 0,
     } ]
 
     # Track player positions for calculating total distance
     player_positions_history = {1: [], 2: []}
-    
-    # Compute score prediction and probability for each ball shot
-    # score_prediction, score_probability = mini_court.predict_score(ball_mini_court_detections, ball_landing_frames, player_balls_frames, player_position_to_id, ball_shots_frames_stats)
     
     # Loop over all ball shots except the last one since it doesn't have an answer shot.
     for ball_shot_ind in range(len(ball_shots_frames_stats)):
@@ -471,10 +466,7 @@ def main():
             distance_covered_by_opponent_meters = 0
             opponent_speed = 0
 
-        # Calculate score probability based on shot speed and opponent position
-        # (Simple model: faster shots with opponent far from ball landing position have higher probability)
-        shot_probability = min(95, 40 + (speed_of_ball_shot / 3))  # Base probability on shot speed
-        # TODO: Use the correct shot probability once it's ready
+
 
         # Update player stats
         current_player_stats = deepcopy(player_stats_data[-1]) # Copy of previous stats
@@ -494,7 +486,6 @@ def main():
             
         current_player_stats[f'player_{player_shot_ball}_total_shot_speed'] += speed_of_ball_shot
         current_player_stats[f'player_{player_shot_ball}_last_shot_speed'] = speed_of_ball_shot
-        current_player_stats[f'player_{player_shot_ball}_score_probability'] = shot_probability
         
         # Update min and max shot speeds
         # Min
@@ -597,14 +588,20 @@ def main():
 
     # Draw Mini Court
     if DRAW_MINI_COURT:
+        # Draw the mini court on the video frames
         output_frames = mini_court.draw_mini_court(output_frames)
    
-        output_frames = mini_court.draw_ball_landing_heatmap(output_frames, player_balls_frames, ball_mini_court_detections, ball_shots_frames_upper, ball_shots_frames_lower, selected_player=SELECTED_PLAYER)
+        # Draw the heatmaps on the mini court
+        _, ball_landing_heatmaps = mini_court.draw_ball_landing_heatmap(output_frames, player_balls_frames, ball_mini_court_detections, ball_shots_frames_upper, ball_shots_frames_lower, selected_player=SELECTED_PLAYER)
+        _, player_distance_heatmaps = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections, selected_player=SELECTED_PLAYER)
+        
+        # Compute score prediction and probability for each ball shot
+        output_frames = mini_court.draw_score_heatmap(output_frames, ball_landing_heatmaps, player_distance_heatmaps)
 
-        #output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections, selected_player=SELECTED_PLAYER)
-
+        # Draw the trajectories of the ball on the mini court
         output_frames = mini_court.draw_shot_trajectories(output_frames, player_mini_court_detections, ball_mini_court_detections, ball_landing_frames_stats, ball_shots_frames_stats, serve_player=serve_player)     
 
+        # Draw the player positions on the mini court
         output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections,object_type='player')
         #output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, object_type='ball')
 
