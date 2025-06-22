@@ -369,6 +369,8 @@ if __name__ == "__main__":
     image_paths_test = bounce_test + no_bounce_test
     labels_test = [1 for x in range(len(bounce_test))] + [0 for x in range(len(no_bounce_test))]
     
+
+    # TODO : need to add standardization ? scale image pixels between [0,1] ??
     # Define transformations
     # Define transformations (WITHOUT Normalization)
     transform_no_norm = transforms.Compose([

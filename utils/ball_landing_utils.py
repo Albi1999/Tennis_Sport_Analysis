@@ -104,7 +104,7 @@ def scraping_data_for_inference(video_n, output_path, input_frames, ball_shots_f
             if idx in ball_shots_frames:
                 continue
             # Furthermore, check that there are atleast 4 consecutive tracks (else we add empty image / too little trace)
-            elif any(ball_detect[0] is None for ball_detect in ball_detections[idx:idx+4]):
+            elif all(ball_detect[0] is None for ball_detect in ball_detections[idx:idx+4]):
                 continue
 
             # Else, we run inference on the image
@@ -175,6 +175,7 @@ def scraping_data(video_n, output_path, input_frames, ball_bounce_frames, ball_s
             for i in bounce_frames_curr:
                 if i in ball_shots_frames_original:
                     break
+                # trained on any, but should try to switch to all!
                 elif any(ball_detect[0] is None for ball_detect in ball_detections[i:i+4]):
                     continue
 
