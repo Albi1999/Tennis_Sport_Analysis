@@ -12,7 +12,7 @@ from utils import (read_video,
                    detect_frames_TRACKNET,
                    create_player_stats_box_video,
                    cluster_series,
-                   filter_bounce_frames_for_player,
+                   filter_ball_detections_by_player,
                    draw_debug_window,
                    draw_frames_number,
                    draw_ball_landings,
@@ -46,18 +46,21 @@ def main():
     SELECTED_PLAYER = 'Lower' # 'Upper' or 'Lower'
     
     # Draw Options
-    DRAW_MINI_COURT = False
+    DRAW_MINI_COURT = True
     DRAW_STATS_BOX = True
 
     # Debugging Mode
-    DEBUG = False
+    DEBUG = True
 
     # Video to run inference on
     # Note : for video 116, change in mini_court.convert_bounding_boxes_to_mini_court_coordinates(...) ball_detections_YOLO to ball_detections
     # (leads to better results)
-    video_number = 102
-    ground_truth_bounce = []
+    video_number = 101
     print(f"Running inference on video {video_number}")
+    
+    # Insert ground truth values for the racket hits and ball landings for best accuracy
+    ground_truth_bounce = []
+    ground_truth_racket_hits = []
 
     # Video Paths
     input_video_path = f'data/input_video{video_number}.mp4'  #
@@ -162,6 +165,8 @@ def main():
 
     if ball_shots_frames[0] != first_hit:
         ball_shots_frames.insert(0, first_hit)
+        
+
 
     print("Ball Shots from Visual : ", ball_shots_frames_visual)
     print("Ball Shots from Audio : ", ball_shots_frames_audio)
@@ -169,8 +174,8 @@ def main():
 
   #  ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
   #  ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
-   # print("Ball Shots from Audio : ", ball_shots_frames_audio)
-   # print("Audio Refinment :", ball_shots_frames)
+  #  print("Ball Shots from Audio : ", ball_shots_frames_audio)
+  #  print("Audio Refinment :", ball_shots_frames)
     ball_shots_frames_stats = ball_shots_frames.copy()
 
     # First, create a completely black video with same dimensions & fps of actual video 
@@ -187,7 +192,7 @@ def main():
     # Draw Keypoints (and lines) of the court into black video 
    # output_frames_black = courtline_detector.draw_keypoints_on_video(output_frames_black, refined_keypoints)
 
-    _ = scraping_data_for_inference(video_n= video_number, output_path = 'data_inference', input_frames = output_frames_black,
+    scraping_data_for_inference(video_n= video_number, output_path = 'data_inference', input_frames = output_frames_black,
                                  ball_shots_frames = ball_shots_frames , trace = TRACE, ball_detections = ball_detections_tracknet)
 
     # Instantiate Bounce Model
@@ -210,11 +215,14 @@ def main():
     print(f"Predicted Bounce Frames : {ball_landing_frames}")
     
     # TODO: Create a function to select ONLY the ball landing frames in the upper part of the court
-    player_balls_frames = filter_bounce_frames_for_player(ball_landing_frames, 
-                                                          ball_detections, 
-                                                          refined_keypoints, 
-                                                          player=SELECTED_PLAYER)
-    print(f"{SELECTED_PLAYER} Player Ball Frames : {player_balls_frames}")
+    upper_court_balls_frames, lower_court_balls_frames = filter_ball_detections_by_player(ball_landing_frames, ball_mini_court_detections, mini_court)
+    print(f"Upper Court Bounce Frames : {upper_court_balls_frames}")
+    print(f"Lower Court Bounce Frames : {lower_court_balls_frames}")
+    if SELECTED_PLAYER == 'Upper':
+        player_balls_frames = lower_court_balls_frames
+    else:
+        player_balls_frames = upper_court_balls_frames
+    print(f"Selected player is {SELECTED_PLAYER} so the bounce used in ball heatmap are in the opposite court and are: {player_balls_frames}")
     
     
 
@@ -226,8 +234,10 @@ def main():
         # Fixing some mistakes in the ball shots frames
 
         if video_number == 101:
-            ground_truth_bounce = [20,50,77,106,138,197,230,270,301]
+            ground_truth_bounce = [20,50,77,106,138,168,197,230,270,301]
             ball_shots_frames_stats.remove(123)
+            ball_shots_frames_stats.remove(115)
+            ball_shots_frames_stats.append(118)
 
         if video_number == 102:
             ground_truth_bounce = [13,41,73,105,131,159,190,221,270,299,329,363,414]
@@ -348,14 +358,24 @@ def main():
             
         if video_number == 1003:
             ground_truth_bounce = [20, 50, 76, 101, 141]
-        
-        
-
+            
+        ball_landing_frames_stats = ground_truth_bounce.copy()
         ball_shots_frames_stats = sorted(ball_shots_frames_stats)
+ 
+        # Get the racket hit frames for the player
+        ball_shots_frames_upper, ball_shots_frames_lower = filter_ball_detections_by_player(ball_shots_frames_stats, ball_mini_court_detections, mini_court)
+        print(f"Ball Shots Upper Player: {ball_shots_frames_upper}")
+        print(f"Ball Shots Lower Player: {ball_shots_frames_lower}")
+        if ball_shots_frames_upper[0] < ball_shots_frames_lower[0]:
+            serve_player = 'Upper'
+        else:
+            serve_player = 'Lower'
+        print(f"The Player who serves is: {serve_player}")
 
-        # Print the ball shots frames to check what we have as input for the stats
-        print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
-        print(f"Ground Truth Bounce Frames : {ground_truth_bounce[1:]}")
+        # Print the ground truth values for the racket hits and ball landings for debugging purposes
+        if len(ball_shots_frames_stats) > 0 and len(ground_truth_bounce) > 0:
+            print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
+            print(f"Ground Truth Bounce Frames : {ground_truth_bounce}")
 
     ######## MATCH STATS ########
 
@@ -372,7 +392,6 @@ def main():
         'player_1_last_player_speed': 0,
         'player_1_hits_counter': 0,
         'player_1_distance_covered': 0,
-        'player_1_score_probability': 0,
 
         #player 2 stats
         'player_2_number_of_shots': 0,
@@ -384,16 +403,15 @@ def main():
         'player_2_last_player_speed': 0,
         'player_2_hits_counter': 0,
         'player_2_distance_covered': 0,
-        'player_2_score_probability': 0,
     } ]
 
     # Track player positions for calculating total distance
     player_positions_history = {1: [], 2: []}
     
     # Loop over all ball shots except the last one since it doesn't have an answer shot.
-    for ball_shot_ind in range(len(ball_shots_frames_stats)-1):
+    for ball_shot_ind in range(len(ball_shots_frames_stats)):
         start_frame = ball_shots_frames_stats[ball_shot_ind]               # Starting frame of the ball shot
-        end_frame = ball_shots_frames_stats[ball_shot_ind+1]               # Ending frame of the ball shot
+        end_frame = ball_landing_frames_stats[ball_shot_ind]               # Ending frame of the ball shot
         ball_shot_time_in_seconds = (end_frame - start_frame) / fps        # Time taken by the ball to travel from the player to the opponent
 
         # Get distance covered by the ball
@@ -448,10 +466,7 @@ def main():
             distance_covered_by_opponent_meters = 0
             opponent_speed = 0
 
-        # Calculate score probability based on shot speed and opponent position
-        # (Simple model: faster shots with opponent far from ball landing position have higher probability)
-        shot_probability = min(95, 40 + (speed_of_ball_shot / 3))  # Base probability on shot speed
-        # TODO: Use the correct shot probability once it's ready
+
 
         # Update player stats
         current_player_stats = deepcopy(player_stats_data[-1]) # Copy of previous stats
@@ -459,10 +474,18 @@ def main():
         
         # Player who shot the ball stats
         current_player_stats[f'player_{player_shot_ball}_number_of_shots'] += 1
-        current_player_stats[f'player_{player_shot_ball}_hits_counter'] += 1 # Increment hits counter
+        
+        if start_frame in ball_shots_frames_upper:
+            # This shot was made by the upper player
+            upper_player_id = player_position_to_id.get('Upper')
+            current_player_stats[f'player_{upper_player_id}_hits_counter'] += 1
+        elif start_frame in ball_shots_frames_lower:
+            # This shot was made by the lower player
+            lower_player_id = player_position_to_id.get('Lower')
+            current_player_stats[f'player_{lower_player_id}_hits_counter'] += 1
+            
         current_player_stats[f'player_{player_shot_ball}_total_shot_speed'] += speed_of_ball_shot
         current_player_stats[f'player_{player_shot_ball}_last_shot_speed'] = speed_of_ball_shot
-        current_player_stats[f'player_{player_shot_ball}_score_probability'] = shot_probability
         
         # Update min and max shot speeds
         # Min
@@ -511,7 +534,7 @@ def main():
 
 
     ######## ANIMATIONS ########
-    
+    '''
     # Create player heatmap
     player_heatmap_path = mini_court.create_player_heatmap_animation(
         player_mini_court_detections,
@@ -546,7 +569,7 @@ def main():
         selected_player=SELECTED_PLAYER,
         player_mapping=player_position_to_id)
     print(f"Player Stats Box saved to: {stats_box_video_path}")
-
+    '''
 
 
 
@@ -565,27 +588,22 @@ def main():
 
     # Draw Mini Court
     if DRAW_MINI_COURT:
+        # Draw the mini court on the video frames
         output_frames = mini_court.draw_mini_court(output_frames)
-        output_frames = mini_court.draw_ball_landing_heatmap(
-                output_frames,
-                player_mini_court_detections,
-                ball_mini_court_detections,
-                ball_landing_frames,
-                player_balls_frames,
-                sigma=15
-                )
+   
+        # Draw the heatmaps on the mini court
+        _, ball_landing_heatmaps = mini_court.draw_ball_landing_heatmap(output_frames, player_balls_frames, ball_mini_court_detections, ball_shots_frames_upper, ball_shots_frames_lower, selected_player=SELECTED_PLAYER)
+        _, player_distance_heatmaps = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections, selected_player=SELECTED_PLAYER)
+        
+        # Compute score prediction and probability for each ball shot
+        output_frames = mini_court.draw_score_heatmap(output_frames, ball_landing_heatmaps, player_distance_heatmaps)
 
-    #    output_frames = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections)
-    #    output_frames = mini_court.draw_ball_landing_points(output_frames, ball_mini_court_detections, ball_landing_frames)
-        '''   
-        output_frames = mini_court.draw_shot_trajectories(output_frames, 
-                                            player_mini_court_detections, 
-                                            ball_mini_court_detections, 
-                                            ball_landing_frames,
-                                            player_balls_frames)     
-        '''
-        output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, color = (255,255,0))
-        output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, color = (0,255,255))
+        # Draw the trajectories of the ball on the mini court
+        output_frames = mini_court.draw_shot_trajectories(output_frames, player_mini_court_detections, ball_mini_court_detections, ball_landing_frames_stats, ball_shots_frames_stats, serve_player=serve_player)     
+
+        # Draw the player positions on the mini court
+        output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections,object_type='player')
+        #output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, object_type='ball')
 
     # Draw player stats box
     if DRAW_STATS_BOX:

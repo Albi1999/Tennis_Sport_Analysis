@@ -869,3 +869,62 @@ def convert_ball_detection_to_bbox(ball_track, padding=5):
         lst_of_bboxes.append(bboxes)
 
     return lst_of_bboxes
+
+def filter_ball_detections_by_player(frames, ball_mini_court_detections, minicourt):
+    """
+    Filters ball detection frames into two lists - one for upper player and one for lower player.
+    
+    Args:
+        frames (list): Sorted list of frame numbers where racket hits were detected ore where a ball landed
+        ball_mini_court_detections (list): List of dictionaries containing ball positions in mini court
+        minicourt (class): MiniCourt object 
+    Returns:
+        tuple: (upper_player_hits, lower_player_hits) - Lists of frame numbers for each player's hits
+    """
+    upper_player_area_ball_detections = []
+    lower_player_area_ball_detections = []
+    
+    if not frames or len(ball_mini_court_detections) == 0:
+        return upper_player_area_ball_detections, lower_player_area_ball_detections
+    
+    # Get the ball position at the first ball detection frame
+    first_ball_detection = frames[0]
+    
+    # Calculate the net's y-coordinate (middle of court)
+    net_y = minicourt.net_y
+    
+    # Default to upper player first (will be used if we can't determine)
+    is_upper_first = True
+    
+    # Check if the first ball detection frame is within range of available frames
+    if first_ball_detection < len(ball_mini_court_detections):
+        # Try to get ball position from the dictionary
+        if 1 in ball_mini_court_detections[first_ball_detection]:
+            ball_position = ball_mini_court_detections[first_ball_detection][1]
+            
+            # Determine first player based on ball position
+            if ball_position[1] <= net_y:
+                # Ball is in upper part of court (hit/bounce in upper player area)
+                is_upper_first = True
+            else:
+                # Ball is in lower part of court (hit/bounce in lower player area)
+                is_upper_first = False
+        else:
+            print("Warning: No ball detected at first hit frame. Defaulting to upper player first.")
+    else:
+        print("Warning: First hit frame is out of range. Defaulting to upper player first.")
+    
+    # Distribute frames to each player based on alternating pattern
+    for i, frame in enumerate(frames):
+        if is_upper_first:
+            if i % 2 == 0:  # 0, 2, 4, ...
+                upper_player_area_ball_detections.append(frame)
+            else:  # 1, 3, 5, ...
+                lower_player_area_ball_detections.append(frame)
+        else:
+            if i % 2 == 0:  # 0, 2, 4, ...
+                lower_player_area_ball_detections.append(frame)
+            else:  # 1, 3, 5, ...
+                upper_player_area_ball_detections.append(frame)
+    
+    return upper_player_area_ball_detections, lower_player_area_ball_detections

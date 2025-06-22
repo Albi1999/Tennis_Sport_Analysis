@@ -29,7 +29,7 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
         shapes = np.zeros_like(frame, np.uint8)
         # Dimensions of the rectangle
         width = 330
-        height = 380 if not show_both_players else 270  # Increased height for additional stats
+        height = 340 if not show_both_players else 270  # Reduced height after removing score probability
         # Position of the rectangle
         start_x = frame.shape[1] - 400
         start_y = frame.shape[0] - (height + 50)
@@ -48,10 +48,17 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             cv2.putText(frame, text, (start_x+80, start_y+30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         else:
+            # Determine the color based on the selected player
+            if selected_player == 'Upper':
+                player_color = (255, 255, 0)  # Cyan
+            else:
+                player_color = (255, 0, 255)  # Magenta
+        
             # Only show selected player
             text = f"{selected_player} Player Stats"
             cv2.putText(frame, text, (start_x+50, start_y+30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, player_color, 2)
+
             
         # Add stats rows
         if show_both_players:
@@ -170,14 +177,7 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
             cv2.putText(frame, text, (start_x+180, y_offset), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Score probability
-            y_offset += line_spacing
-            text = "Score Probability"
-            cv2.putText(frame, text, (start_x+10, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            text = f"{row[f'player_{selected_player_id}_score_probability']:.1f}%"
-            cv2.putText(frame, text, (start_x+180, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            # Removed score probability display
         
         output_video_frames[index] = frame
     
@@ -206,7 +206,7 @@ def create_player_stats_box_video(player_stats, video_number, fps=30, selected_p
         selected_player_id = player_mapping[selected_player]
     
     width = 380
-    height = 380 if not show_both_players else 270
+    height = 340 if not show_both_players else 270  # Reduced height after removing score probability
     output_path = f"output/animations/player_stats_box{video_number}.mp4"
     
     # Initialize video writer
@@ -349,14 +349,7 @@ def create_player_stats_box_video(player_stats, video_number, fps=30, selected_p
             cv2.putText(stats_box_frame, text, (width//2, y_offset), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
-            # Score probability
-            y_offset += line_spacing
-            text = "Score Probability"
-            cv2.putText(stats_box_frame, text, (20, y_offset), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-            text = f"{row[f'player_{selected_player_id}_score_probability']:.1f}%"
-            cv2.putText(stats_box_frame, text, (width//2, y_offset), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            # Removed score probability display
 
         # Write the current frame to the video
         video_writer.write(stats_box_frame)
