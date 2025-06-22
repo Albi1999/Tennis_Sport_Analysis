@@ -1,6 +1,5 @@
 from utils import (read_video, 
                    save_video, 
-                   refine_audio, 
                    write_track, 
                    get_ball_shot_frames_audio, 
                    draw_racket_hits, 
@@ -10,7 +9,6 @@ from utils import (read_video,
                    create_black_video,
                    scraping_data_for_inference,
                    detect_frames_TRACKNET,
-                   create_player_stats_box_video,
                    cluster_series,
                    filter_ball_detections_by_player,
                    draw_debug_window,
@@ -21,20 +19,21 @@ from utils import (read_video,
                    combine_audio_visual,
                    convert_mp4_to_mp3
                    )
+
 from trackers import (PlayerTracker, BallTrackerNetTRACE, BallTracker)
 from mini_court import MiniCourt
 from ball_landing import (BounceCNN, make_prediction, evaluation_transform)
 from court_line_detector import CourtLineDetector
-import cv2 
+
 import torch 
-from copy import deepcopy
 import pandas as pd
 import info
 import os 
 import pickle
 import numpy as np
+from copy import deepcopy
 
-# TODO: Clean the code and remove the unnecessary parts
+
 
 def main():
 
@@ -52,72 +51,72 @@ def main():
     # Debugging Mode
     DEBUG = True
 
-    # Video to run inference on
-    # Note : for video 116, change in mini_court.convert_bounding_boxes_to_mini_court_coordinates(...) ball_detections_YOLO to ball_detections
-    # (leads to better results)
-    video_number = 101
-    print(f"Running inference on video {video_number}")
+    # Video Number to run inference on
+    VIDEO_NUMBER = 101
+    print(f"Running inference on video {VIDEO_NUMBER}")
     
     # Insert ground truth values for the racket hits and ball landings for best accuracy
-    ground_truth_bounce = []
-    ground_truth_racket_hits = []
+    GT_BOUNCES_FRAMES = []
+    GT_RACKET_HITS_FRAMES = []
 
     # Video Paths
-    input_video_path = f'data/input_video{video_number}.mp4'  #
-    input_video_path_audio = f'data/input_video{video_number}_audio.mp3'
-    output_video_path = f'output/final/output_video{video_number}.mp4'
+    INPUT_VIDEO_PATH = f'data/input_video{VIDEO_NUMBER}.mp4'  #
+    INPUT_VIDEO_PATH_AUDIO = f'data/input_video{VIDEO_NUMBER}_audio.mp3'
+    OUTPUT_VIDEO_PATH = f'output/final/output_video{VIDEO_NUMBER}.mp4'
 
     # Check if we already processed that video by looking if output with video number reference exists (for faster testing)
-    if os.path.exists(output_video_path):
+    if os.path.exists(OUTPUT_VIDEO_PATH):
         READ_STUBS = True
     else:
         READ_STUBS = False
     
-    if not os.path.exists(input_video_path_audio):
-        print(f"Converting video {video_number} to audio")
-        convert_mp4_to_mp3(input_video_path, input_video_path_audio)
+    if not os.path.exists(INPUT_VIDEO_PATH_AUDIO):
+        print(f"Converting video {VIDEO_NUMBER} to audio")
+        convert_mp4_to_mp3(INPUT_VIDEO_PATH, INPUT_VIDEO_PATH_AUDIO)
         
     # Check if GPU is available
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using DEVICE: {DEVICE}")
 
 
 
     ######## DETECTIONS ########
 
     # Initialize Ball Tracker
+    
     # YOLO
     ball_tracker_yolo = BallTracker(model_path = 'models/yolo11best.pt')
+    
     # TrackNet
     ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
-    saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=device)
+    saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=DEVICE)
     ball_tracker_TRACKNET.load_state_dict(saved_state_dict['model_state'])
-    ball_tracker_TRACKNET.to(device)
+    ball_tracker_TRACKNET.to(DEVICE)
     ball_tracker_TRACKNET.eval() 
 
     # Initialize Player Tracker
     player_tracker = PlayerTracker(model_path = 'models/yolov8x.pt')
 
     # Initialize Courline Detector
-    courtline_detector = CourtLineDetector(model_path = 'models/keypoints_model.pth', machine = device) 
+    courtline_detector = CourtLineDetector(model_path = 'models/keypoints_model.pth', machine = DEVICE) 
 
     # Read in the video
-    video_frames, fps, video_width, video_height = read_video(input_video_path)
+    video_frames, fps, video_width, video_height = read_video(INPUT_VIDEO_PATH)
 
     # Detect & Track Players
     player_detections = player_tracker.detect_frames(video_frames,
                                                     read_from_stub = READ_STUBS,
-                                                    stub_path = f'tracker_stubs/player_detections_{video_number}.pkl')
+                                                    stub_path = f'tracker_stubs/player_detections_{VIDEO_NUMBER}.pkl')
 
     # Detect & Track Ball (TrackNet)
-    ball_detections, ball_detections_tracknet = detect_frames_TRACKNET(video_frames, video_number = video_number, tracker =ball_tracker_TRACKNET,
+    ball_detections, ball_detections_tracknet = detect_frames_TRACKNET(video_frames, video_number=VIDEO_NUMBER, tracker=ball_tracker_TRACKNET,
                         video_width=video_width, video_height= video_height, read_from_stub = READ_STUBS, 
-                        stub_path=  f'tracker_stubs/tracknet_ball_detections_{video_number}.pkl')
+                        stub_path=  f'tracker_stubs/tracknet_ball_detections_{VIDEO_NUMBER}.pkl')
     
     # Detect & Track Ball (YOLO)
     ball_detections_YOLO = ball_tracker_yolo.detect_frames(video_frames, 
                                                            read_from_stub = READ_STUBS, 
-                                                            stub_path = f'tracker_stubs/ball_detections_YOLO_{video_number}.pkl')
+                                                            stub_path = f'tracker_stubs/ball_detections_YOLO_{VIDEO_NUMBER}.pkl')
             
     ball_detections_YOLO = ball_tracker_yolo.interpolate_ball_positions(ball_detections_YOLO)
 
@@ -147,9 +146,9 @@ def main():
     # Get Racket Hits based on audio & visual information
 
     # Get first hit with less sensitive audio peak detection
-    first_hit = (get_ball_shot_frames_audio(input_video_path_audio, fps, height = 0.01, prominence=0.01))[0]
+    first_hit = (get_ball_shot_frames_audio(INPUT_VIDEO_PATH_AUDIO, fps, height = 0.01, prominence=0.01))[0]
     ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_YOLO, fps, mode = 'yolo')
-    ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
+    ball_shots_frames_audio = get_ball_shot_frames_audio(INPUT_VIDEO_PATH_AUDIO, fps, plot = True)
 
     ball_shots_frames = combine_audio_visual(ball_shots_frames_visual= ball_shots_frames_visual,
                                                   ball_shots_frames_audio= ball_shots_frames_audio, 
@@ -172,15 +171,12 @@ def main():
     print("Ball Shots from Audio : ", ball_shots_frames_audio)
     print("Combined :", ball_shots_frames)
 
-  #  ball_shots_frames_audio = get_ball_shot_frames_audio(input_video_path_audio, fps, plot = True)
-  #  ball_shots_frames = refine_audio(ball_shots_frames_audio, fps, input_video_path_audio)
-  #  print("Ball Shots from Audio : ", ball_shots_frames_audio)
-  #  print("Audio Refinment :", ball_shots_frames)
+
     ball_shots_frames_stats = ball_shots_frames.copy()
 
     # First, create a completely black video with same dimensions & fps of actual video 
     frame_count = len(video_frames)
-    input_video_black_path = f"data/trajectory_model_videos/output_video{video_number}.mp4"
+    input_video_black_path = f"data/trajectory_model_videos/output_video{VIDEO_NUMBER}.mp4"
     create_black_video(input_video_black_path, video_width, video_height, fps, frame_count)
 
     # Read in this video
@@ -192,7 +188,7 @@ def main():
     # Draw Keypoints (and lines) of the court into black video 
    # output_frames_black = courtline_detector.draw_keypoints_on_video(output_frames_black, refined_keypoints)
 
-    scraping_data_for_inference(video_n= video_number, output_path = 'data_inference', input_frames = output_frames_black,
+    scraping_data_for_inference(video_n= VIDEO_NUMBER, output_path = 'data_inference', input_frames = output_frames_black,
                                  ball_shots_frames = ball_shots_frames , trace = TRACE, ball_detections = ball_detections_tracknet)
 
     # Instantiate Bounce Model
@@ -205,7 +201,7 @@ def main():
 
     # Make Predictions
     predictions, confidences, img_idxs = make_prediction(model = model_bounce, best_model_path = 'models/best_bounce_model.pth',
-                                         input_frames_directory = 'data_inference/images_inference', transform = evaluation_transform(mean, std), device = device)
+                                         input_frames_directory = 'data_inference/images_inference', transform = evaluation_transform(mean, std), device = DEVICE)
     
     # Get Bounce Frames
     mask = np.array(predictions) == 1
@@ -214,7 +210,7 @@ def main():
     print(f"Predicted V Shaped Frames : {img_idxs_bounce}")
     print(f"Predicted Bounce Frames : {ball_landing_frames}")
     
-    # TODO: Create a function to select ONLY the ball landing frames in the upper part of the court
+    # Filter Ball Detections by Player
     upper_court_balls_frames, lower_court_balls_frames = filter_ball_detections_by_player(ball_landing_frames, ball_mini_court_detections, mini_court)
     print(f"Upper Court Bounce Frames : {upper_court_balls_frames}")
     print(f"Lower Court Bounce Frames : {lower_court_balls_frames}")
@@ -229,138 +225,24 @@ def main():
 
     ######## GROUND TRUTH ########
     
-    # TODO: Remove the too bad videos from this statement (?)
+    # Set the ground truth values for the racket hits and ball landings
     if DEBUG:
-        # Fixing some mistakes in the ball shots frames
-
-        if video_number == 101:
-            ground_truth_bounce = [20,50,77,106,138,168,197,230,270,301]
-            ball_shots_frames_stats.remove(123)
+        
+        # Example ground truth values for video 101
+        if VIDEO_NUMBER == 101:
+            GT_RACKET_HITS_FRAMES = [12, 28, 58, 89, 118, 153, 179, 211, 243, 283]
+            GT_BOUNCES_FRAMES = [20,50,77,106,138,168,197,230,270,301]
+            
+            """
             ball_shots_frames_stats.remove(115)
             ball_shots_frames_stats.append(118)
+            ball_shots_frames_stats.remove(123)
+            ball_shots_frames_stats.sort()
+            """
 
-        if video_number == 102:
-            ground_truth_bounce = [13,41,73,105,131,159,190,221,270,299,329,363,414]
-
-        if video_number == 103:
-            ground_truth_bounce = [23,66,97]
-
-        if video_number == 105:
-            ground_truth_bounce = [48,None,115,146,208,268]
-            ball_shots_frames_stats.append(186)
-
-        if video_number == 107:
-            ground_truth_bounce = [69,107,133,172,202,279]
-            ball_shots_frames_stats.remove(269)
-            ball_shots_frames_stats.remove(203)
-
-        if video_number == 108:
-            ground_truth_bounce = [29, 78, 104]
-
-        if video_number == 109:
-            ground_truth_bounce = [30, 55, 86, 111, 144, 169, 203, 244]
-            ball_shots_frames_stats.remove(47)
-            ball_shots_frames_stats.remove(61)
-            ball_shots_frames_stats.append(65)
-            ball_shots_frames_stats.remove(116)
-            ball_shots_frames_stats.append(124)
-            ball_shots_frames_stats.remove(148)
-            ball_shots_frames_stats.append(153)
-            ball_shots_frames_stats.remove(171)
-            ball_shots_frames_stats.append(177)
-            ball_shots_frames_stats.append(211)
-
-        if video_number == 110:
-            ground_truth_bounce = [23, 60, 94, 123, 162, 200, 244, 273, 305, 334, 363, 390]
-            ball_shots_frames_stats.remove(90)
-            ball_shots_frames_stats.append(104)
-            ball_shots_frames_stats.remove(112)
-            ball_shots_frames_stats.remove(132)
-            ball_shots_frames_stats.append(136)
-            ball_shots_frames_stats.remove(169)
-            ball_shots_frames_stats.append(174)
-            ball_shots_frames_stats.remove(203)
-            ball_shots_frames_stats.append(213)
-            ball_shots_frames_stats.remove(229)
-            ball_shots_frames_stats.remove(243)
-            ball_shots_frames_stats.append(252)
-            ball_shots_frames_stats.remove(270)
-            ball_shots_frames_stats.append(282)
-            ball_shots_frames_stats.remove(299)
-            ball_shots_frames_stats.append(310)
-            ball_shots_frames_stats.remove(327)
-            ball_shots_frames_stats.append(340)
-            ball_shots_frames_stats.remove(359)
-            ball_shots_frames_stats.append(372)
-            ball_shots_frames_stats.remove(385)
-            ball_shots_frames_stats.append(400)
-            ball_shots_frames_stats.remove(414)
-        
-        if video_number == 111:
-            ground_truth_bounce = [43, 76, 114, 144, 171, 207, 236]
-        
-        if video_number == 112:
-            ground_truth_bounce = [45, 83, 109, 150, 178, 224, 268, 298, 330, 363, 405, 438]
-            ball_shots_frames_stats.remove(100)
-            ball_shots_frames_stats.append(158)
-            ball_shots_frames_stats.remove(167)
-            ball_shots_frames_stats.append(193)
-            ball_shots_frames_stats.remove(317)
-            ball_shots_frames_stats.append(445)
-            ball_shots_frames_stats.remove(466)
-        
-        if video_number == 113:
-            ground_truth_bounce = [26, 67, 96, 133, 148]
-            ball_shots_frames_stats.append(33)
-            ball_shots_frames_stats.append(76)
-            ball_shots_frames_stats.remove(144)
-        
-        if video_number == 114:
-            ground_truth_bounce = [19, 58, 83, 123, 152, 228]
-            ball_shots_frames_stats.remove(65)
-            ball_shots_frames_stats.append(69)
-            ball_shots_frames_stats.remove(153)
-            ball_shots_frames_stats.remove(219)
-            ball_shots_frames_stats.remove(249)
-
-        if video_number == 115:
-            ground_truth_bounce = [17, 50, 75, 120, 150, 183, 213, 242]
-            ball_shots_frames_stats.remove(44)
-            ball_shots_frames_stats.append(156)
-            ball_shots_frames_stats.remove(169)
-        
-        if video_number == 116:
-            ground_truth_bounce = [12, 51, 81]
-            ball_shots_frames_stats.remove(95)
-        
-        if video_number == 117:
-            ground_truth_bounce = [14, 45, 74, 104, 138, 165, 196]
-            ball_shots_frames_stats.remove(98)
-        
-        if video_number == 118:
-            ground_truth_bounce = [38, 69, 95, 145, 171, 208, 237, 281, 309]
-            ball_shots_frames_stats.append(26)
-            ball_shots_frames_stats.append(45)
-            ball_shots_frames_stats.append(74)
-            ball_shots_frames_stats.remove(95)
-            ball_shots_frames_stats.append(109)
-            ball_shots_frames_stats.remove(225)
-            ball_shots_frames_stats.remove(321)
             
-        if video_number == 1000:
-            ground_truth_bounce = [75]
-        
-        if video_number == 1001:
-            ground_truth_bounce = [56, 92]
-        
-        if video_number == 1002:
-            ground_truth_bounce = [22, 51, 86]
-            
-        if video_number == 1003:
-            ground_truth_bounce = [20, 50, 76, 101, 141]
-            
-        ball_landing_frames_stats = ground_truth_bounce.copy()
-        ball_shots_frames_stats = sorted(ball_shots_frames_stats)
+        ball_landing_frames_stats = GT_BOUNCES_FRAMES.copy()
+        ball_shots_frames_stats = GT_RACKET_HITS_FRAMES.copy()
  
         # Get the racket hit frames for the player
         ball_shots_frames_upper, ball_shots_frames_lower = filter_ball_detections_by_player(ball_shots_frames_stats, ball_mini_court_detections, mini_court)
@@ -373,9 +255,9 @@ def main():
         print(f"The Player who serves is: {serve_player}")
 
         # Print the ground truth values for the racket hits and ball landings for debugging purposes
-        if len(ball_shots_frames_stats) > 0 and len(ground_truth_bounce) > 0:
+        if len(ball_shots_frames_stats) > 0 and len(GT_BOUNCES_FRAMES) > 0:
             print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
-            print(f"Ground Truth Bounce Frames : {ground_truth_bounce}")
+            print(f"Ground Truth Bounce Frames : {GT_BOUNCES_FRAMES}")
 
     ######## MATCH STATS ########
 
@@ -531,49 +413,6 @@ def main():
     player_stats_data_df['player_2_average_player_speed'] = player_stats_data_df['player_2_total_player_speed'] / player_stats_data_df['player_1_number_of_shots']
 
 
-
-
-    ######## ANIMATIONS ########
-    '''
-    # Create player heatmap
-    player_heatmap_path = mini_court.create_player_heatmap_animation(
-        player_mini_court_detections,
-        output_path=f"output/animations/player_heatmap_animation{video_number}.mp4",
-        mask_path=f"output/masks/player_heatmap_mask{video_number}.npy")
-    print(f"Player Heatmap animation saved to: {player_heatmap_path}")
-
-    # Create ball heatmap
-    ball_heatmap_path = mini_court.create_ball_heatmap_animation(
-        player_mini_court_detections,
-        ball_mini_court_detections,
-        ball_landing_frames,
-        player_balls_frames,
-        output_path=f"output/animations/ball_heatmap_animation{video_number}.mp4",
-        sigma=15,
-        color_map=cv2.COLORMAP_HOT,
-        mask_path=f"output/masks/ball_heatmap_mask{video_number}.npy")
-    print(f"Ball Heatmap animation saved to: {ball_heatmap_path}")
-
-    # Create score heatmap (combination of player and ball heatmaps)
-    score_heatmap_path = mini_court.create_scoring_heatmap_animation(
-        player_mini_court_detections, 
-        ball_mini_court_detections, 
-        ball_landing_frames,
-        output_path=f"output/animations/scoring_heatmap_animation{video_number}.mp4", 
-        color_map=cv2.COLORMAP_HOT)
-    print(f"Score Heatmap animation saved to: {score_heatmap_path}")
-    
-    # Create player stats box video
-    stats_box_video_path = create_player_stats_box_video(
-        player_stats_data_df, video_number, fps=fps,
-        selected_player=SELECTED_PLAYER,
-        player_mapping=player_position_to_id)
-    print(f"Player Stats Box saved to: {stats_box_video_path}")
-    '''
-
-
-
-
     ######## DRAW OUTPUT ########
     
     # Draw Player Detection
@@ -616,11 +455,11 @@ def main():
         output_frames = draw_debug_window(output_frames)
         output_frames = draw_frames_number(output_frames)
         output_frames = draw_racket_hits(output_frames, ball_shots_frames_stats)
-        output_frames = draw_ball_landings(output_frames, ball_landing_frames, ground_truth_bounce, ball_detections_tracknet)
+        output_frames = draw_ball_landings(output_frames, ball_landing_frames, GT_BOUNCES_FRAMES, ball_detections_tracknet)
 
     # Save video
-    save_video(output_frames, output_video_path, fps)
-    print(f"Output video saved to: {output_video_path}")
+    save_video(output_frames, OUTPUT_VIDEO_PATH, fps)
+    print(f"Output video saved to: {OUTPUT_VIDEO_PATH}")
 
 
 if __name__ == '__main__':
