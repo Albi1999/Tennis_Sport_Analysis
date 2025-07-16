@@ -1,0 +1,49 @@
+% Alberto's Part of the Report
+
+\section{Alberto's Contributions}
+
+\subsection{Bullet Points}
+
+\begin{itemize}
+    \item Keypoint detection (Detection of the key points of the court) (Fixed)
+    \item Courline detection (Detection of the court line) (Fixed)
+    \item Dynamic Keypoint Detection (Detection of the key points of the court in a dynamic way) (Dynamic)
+    % All these are required to have a good detection of the court, needed to compute as accurate as possible statistics for the stat box and draw the mini court.
+    \item Stat Box (Box with statistics about the selected player)
+    \item Video Scraping (Scraping videos from the web)
+    \item Labeling (Labeling the data for training and testing)
+    \item (Slightly) Improved model performance (ball landing detection)
+\end{itemize}
+
+\subsection{Keypoint Detection}
+
+Keypoint detection is the process of detecting the key points of the court, which are used to compute the statistics for the stat box and draw the mini court.
+This was done by detecting the key points of the court in a static way, which means that the key points are detected only once and then used for the rest of the video.
+Then we decided to improve this method by detecting the keypoints of the court dynamically trhough the video, in this way the keypoints are detected in every frame.
+This allows us to have a more accurate detection that is not affected by the camera movement.
+
+Steps:
+\begin{itemize}
+    \item Classic Keypoint Detectio
+    \item Dynamic Keypoint Detection
+    \item Courtline Detection
+    \item Drawing on the Video
+    \item Drawing in the Mini Court
+\end{itemize}
+
+\subsection{Stat Box}
+
+The stat box is a GUI element that displays different statistics about the player that is currently selected in the video. 
+It includes a lot of information that are computed in real time frame by frams, we start by having all the statistics at zero, and then we update them as the video is played.
+
+The different metrics displayed are:
+\begin{itemize}
+    \item Number of shots
+    \item Shot speed (speed of the shot in that frame)
+    \item Minimum shot speed
+    \item Maximum shot speed
+    \item Player speed (speed of the player in that frame)
+    \item Last player speed
+    \item Hits counter
+    \item Distance covered by the player
+\end{itemize}
