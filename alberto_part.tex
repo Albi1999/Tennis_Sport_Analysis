@@ -16,12 +16,12 @@
 \end{itemize}
 
 \subsection{Keypoint Detection}
-
+% This part is only a brief overview of the keypoint detection it serves only as a personal note
 Keypoint detection is the process of detecting the key points of the court, which are used to compute the statistics for the stat box and draw the mini court.
 This was done by detecting the key points of the court in a static way, which means that the key points are detected only once and then used for the rest of the video.
 Then we decided to improve this method by detecting the keypoints of the court dynamically trhough the video, in this way the keypoints are detected in every frame.
 This allows us to have a more accurate detection that is not affected by the camera movement.
-
+% I need to evaluate if we should explain in detail the keypoint detection in a dedicated section or if we just explain it in the Courtline Detection section.
 Steps:
 \begin{itemize}
     \item Classic Keypoint Detectio
@@ -30,6 +30,45 @@ Steps:
     \item Drawing on the Video
     \item Drawing in the Mini Court
 \end{itemize}
+
+\subsection{Courtline Detection}
+
+The detection of tennis court keypoints serves as a fundamental step for most tasks in our system, acting as the spatial basis for player tracking, homography estimation, shot analysis, and statistical visualizations. 
+Without an accurate detection of the court geometry, subsequent steps such as player movement mapping on the mini-court, ball trajectory visualization, and heatmap generation would suffer from significant distortions.
+
+We implemented a dedicated CourtLineDetector class, leveraging a fine-tuned ResNet-50 architecture designed for keypoint regression. 
+The network was trained on a dataset of court images annotated with 14 keypoints, each corresponding to critical intersections or reference points on a standard tennis court (such as baselines, service lines, and center marks).
+The ResNet-50 backbone was initialized with ImageNet pre-trained weights and adapted by replacing its classification head with a fully connected regression layer outputting 28 scalar values, representing the x, y coordinates of the 14 detected keypoints.
+
+% explain the ResNet-50 architecture better and how it was adapted for keypoint detection
+% Put a figure or a graph of the ResNet-50 architecture (?)
+% Add citation for ResNet-50
+
+During inference, each input frame is resized to 224x224 pixels and normalized using ImageNet mean and standard deviation. 
+The network's predicted keypoints are then rescaled to match the original frame resolution. 
+To ensure a consistent alignment with the known court structure, we applied a post-processing step using the Hungarian algorithm (linear sum assignment) to match the predicted points with a reference template of keypoints, minimizing the total Euclidean distance. 
+This step is essential to correct any ordering inconsistencies in the predicted points.
+% Introduce and talk about the Hungarian algorithm
+% Write formula for the Hungarian algorithm
+% Write formula for the euclidean distance
+
+To further refine the predictions, especially in the presence of camera shake or minor detection noise, we implemented a smoothing mechanism that merges keypoints detected within a 20-pixel radius by averaging their coordinates. 
+This refinement reduces jittering effects and ensures temporal stability of the court lines when visualized over a sequence of frames.
+
+The \textbf{CourtLineDetector} supports two operational modes:
+\begin{itemize}
+    \item \textbf{Static Detection}: Keypoints are detected on a single reference frame (typically the first frame of the video if is correct) and reused unchanged for the entire sequence. 
+        This approach is computationally efficient and works well for static camera setups if the selected frame has not keypoints visible and not hidden behind a player.
+    \item \textbf{Dynamic Detection}: Keypoints are detected on every frame individually, allowing the system to adapt to dynamic camera conditions such as pans, little zooms, or shakes. 
+        While this method introduces additional computational cost, it significantly improves the accuracy and consistency of the subsequent visualizations and statistical analyses. 
+        It allows also to refine the position of the detected keypoints if in a frame they are not visible, occluded by players or not detected correctly.
+\end{itemize}
+
+The output keypoints serve as inputs to other modules of the pipeline, particularly the MiniCourt which uses them to compute the homographic transformation required to project real-world player positions and ball locations onto a standardized mini-court representation. 
+Moreover, the player tracking and filtering module leverages the court keypoints to select and assign player identities based on their positions relative to the court layout.
+% Don't know if I have to talk about the MiniCourt or if someone else will do it
+Finally, the CourtLineDetector provides utility functions for drawing both the detected keypoints and the corresponding court lines onto video frames. 
+These visualizations are instrumental for debugging, performance evaluation, and demonstration purposes, ensuring transparency in the detection process and facilitating qualitative assessment by human observers.
 
 \subsection{Stat Box}
 
@@ -47,3 +86,5 @@ The different metrics displayed are:
     \item Hits counter
     \item Distance covered by the player
 \end{itemize}
+
+
