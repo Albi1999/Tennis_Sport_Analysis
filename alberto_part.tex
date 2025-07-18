@@ -16,59 +16,113 @@
 \end{itemize}
 
 \subsection{Keypoint Detection}
-% This part is only a brief overview of the keypoint detection it serves only as a personal note
+%! This part is only a brief overview of the keypoint detection it serves only as a personal note
 Keypoint detection is the process of detecting the key points of the court, which are used to compute the statistics for the stat box and draw the mini court.
 This was done by detecting the key points of the court in a static way, which means that the key points are detected only once and then used for the rest of the video.
 Then we decided to improve this method by detecting the keypoints of the court dynamically trhough the video, in this way the keypoints are detected in every frame.
 This allows us to have a more accurate detection that is not affected by the camera movement.
-% I need to evaluate if we should explain in detail the keypoint detection in a dedicated section or if we just explain it in the Courtline Detection section.
+%// I need to evaluate if we should explain in detail the keypoint detection in a dedicated section or if we just explain it in the Courtline Detection section.
+%* DONE
 Steps:
 \begin{itemize}
-    \item Classic Keypoint Detectio
-    \item Dynamic Keypoint Detection
-    \item Courtline Detection
-    \item Drawing on the Video
-    \item Drawing in the Mini Court
+    \item Classic Keypoint Detection (static approach)
+    \item Dynamic Keypoint Detection (frame-by-frame detection)
+    \item Courtline Detection and Refinement
+    \item Keypoint Visualization on Frames
+    \item Keypoint Utilization in the MiniCourt and Stat Box
 \end{itemize}
+
+%! Report part ------ Still a draft WIP -----
+
+\subsection{Keypoint Detection}
+
+The detection of the $14$ keypoints defining a tennis court layout is a foundational step for our system. 
+These keypoints represent critical court intersections, such as the corners of the baselines, service lines, and center marks, and provide the geometric reference required for tasks like player tracking, ball trajectory mapping, and mini-court projection.
+
+We approached the keypoint detection task as a supervised regression problem, where a Convolutional Neural Network (CNN) predicts the $(x, y)$ coordinates of each keypoint directly from a single input frame.  
+For this purpose, we fine-tuned a ResNet-50 backbone, originally pretrained on ImageNet, replacing its classification head with a fully connected regression layer outputting $28$ values — two for each of the $14$ keypoints.  
+
+During training, we minimized the Mean Squared Error (MSE) between the predicted keypoints $\hat{k}_i$ and the annotated ground truth $k_i$:
+\[
+\mathcal{L}_{\text{MSE}} = \frac{1}{N} \sum_{i=1}^{N} \| \hat{k}_i - k_i \|^2
+\]
+where $N = 14$.  
+Input frames are resized to $224 \times 224$ and normalized using the ImageNet mean and standard deviation. 
+After inference, keypoints are rescaled back to the original frame resolution.
+
+\paragraph{Static vs Dynamic Detection.}  
+We initially adopted a \textbf{static detection} approach, running inference on a single reference frame (typically the first) and reusing the detected keypoints throughout the video.  
+Although efficient, this method proved sensitive to typical broadcast video variations such as camera movements, zooms, or viewpoint changes.
+
+To address this, we implemented a \textbf{dynamic detection} mode, where keypoints are predicted on a per-frame basis.  
+This solution ensures resilience against perspective shifts and maintains consistent geometric reference frames across the entire sequence, a crucial property for homography estimation and correct player assignment.
+
+\paragraph{Keypoint Refinement.}  
+In both modes, we applied a refinement process that averages keypoints detected within a $20$ pixel radius.  
+This post-processing step mitigates localization noise and jitter, improving the stability of the keypoint tracking across frames.
+
+\paragraph{Downstream Integration.}  
+The detected and refined keypoints are instrumental for:
+\begin{itemize}
+    \item Estimating the homography matrix $\mathbf{H}$ for projecting player and ball positions onto the MiniCourt reference plane.
+    \item Resolving player identities based on their relative position with respect to the court layout.
+    \item Guaranteeing geometric coherence for all downstream metrics and visualizations.
+\end{itemize}
+
+This robust keypoint detection pipeline thus underpins the spatial consistency of the entire system, enabling accurate player tracking, tactical analysis, and visualization.
 
 \subsection{Courtline Detection}
 
-The detection of tennis court keypoints serves as a fundamental step for most tasks in our system, acting as the spatial basis for player tracking, homography estimation, shot analysis, and statistical visualizations. 
-Without an accurate detection of the court geometry, subsequent steps such as player movement mapping on the mini-court, ball trajectory visualization, and heatmap generation would suffer from significant distortions.
+The accurate detection of tennis court keypoints is a critical prerequisite for many downstream tasks, including player tracking, homography estimation, trajectory analysis, and tactical visualization. 
+Any error in court geometry estimation would propagate across the system, compromising the reliability of analyses such as player positioning heatmaps or shot trajectory mapping.
 
-We implemented a dedicated CourtLineDetector class, leveraging a fine-tuned ResNet-50 architecture designed for keypoint regression. 
-The network was trained on a dataset of court images annotated with 14 keypoints, each corresponding to critical intersections or reference points on a standard tennis court (such as baselines, service lines, and center marks).
-The ResNet-50 backbone was initialized with ImageNet pre-trained weights and adapted by replacing its classification head with a fully connected regression layer outputting 28 scalar values, representing the x, y coordinates of the 14 detected keypoints.
+We implemented a dedicated \texttt{CourtLineDetector} module based on a fine-tuned ResNet-50 architecture designed for keypoint regression.  
+The network was pretrained on ImageNet and subsequently fine-tuned on a dataset of $8,841$ annotated tennis court images, containing $14$ keypoints per image. 
+These keypoints correspond to court intersections such as corners, baselines, service lines, and net line crossings. 
+The dataset includes courts of different surfaces (hard, clay, grass), providing robustness to appearance variations.
 
-% explain the ResNet-50 architecture better and how it was adapted for keypoint detection
-% Put a figure or a graph of the ResNet-50 architecture (?)
-% Add citation for ResNet-50
+\paragraph{Model Architecture and Training.}  
+We modified the ResNet-50 by replacing its final classification layer with a linear layer outputting $28$ values, corresponding to the $(x,y)$ coordinates of the $14$ keypoints.  
+Given the input frame $I \in \mathbb{R}^{3 \times H \times W}$, resized to $224 \times 224$, the model predicts a vector $\hat{K} \in \mathbb{R}^{28}$.  
+The ground truth keypoints $K$ are normalized according to image size and trained with a Mean Squared Error (MSE) loss:
+\[
+\mathcal{L}_{MSE} = \frac{1}{28} \sum_{i=1}^{28} \left( \hat{K}_i - K_i \right)^2
+\]
+Training was performed for $20$ epochs using the Adam optimizer with a learning rate of $10^{-4}$ and batch size $8$.
 
-During inference, each input frame is resized to 224x224 pixels and normalized using ImageNet mean and standard deviation. 
-The network's predicted keypoints are then rescaled to match the original frame resolution. 
-To ensure a consistent alignment with the known court structure, we applied a post-processing step using the Hungarian algorithm (linear sum assignment) to match the predicted points with a reference template of keypoints, minimizing the total Euclidean distance. 
-This step is essential to correct any ordering inconsistencies in the predicted points.
-% Introduce and talk about the Hungarian algorithm
-% Write formula for the Hungarian algorithm
-% Write formula for the euclidean distance
-
-To further refine the predictions, especially in the presence of camera shake or minor detection noise, we implemented a smoothing mechanism that merges keypoints detected within a 20-pixel radius by averaging their coordinates. 
-This refinement reduces jittering effects and ensures temporal stability of the court lines when visualized over a sequence of frames.
-
-The \textbf{CourtLineDetector} supports two operational modes:
+\paragraph{Post-Processing and Refinement.}  
+Since direct regression may produce noisy outputs, we applied a refinement strategy consisting of two steps:
 \begin{itemize}
-    \item \textbf{Static Detection}: Keypoints are detected on a single reference frame (typically the first frame of the video if is correct) and reused unchanged for the entire sequence. 
-        This approach is computationally efficient and works well for static camera setups if the selected frame has not keypoints visible and not hidden behind a player.
-    \item \textbf{Dynamic Detection}: Keypoints are detected on every frame individually, allowing the system to adapt to dynamic camera conditions such as pans, little zooms, or shakes. 
-        While this method introduces additional computational cost, it significantly improves the accuracy and consistency of the subsequent visualizations and statistical analyses. 
-        It allows also to refine the position of the detected keypoints if in a frame they are not visible, occluded by players or not detected correctly.
+    \item \textbf{Local Averaging:} each predicted keypoint is averaged with its spatial neighbors within a $20$ pixel radius to reduce detection jitter.
+    \item \textbf{Template Matching with Hungarian Algorithm:}  
+    We compute a cost matrix $C$ between the predicted keypoints $\hat{K}$ and a predefined template $T$ (representing standard court keypoints), based on the Euclidean distance:
+    \[
+    C_{ij} = \| \hat{k}_i - t_j \|_2
+    \]
+    We then solve the assignment problem using the Hungarian algorithm to minimize the total matching cost, ensuring consistent keypoint ordering.
 \end{itemize}
 
-The output keypoints serve as inputs to other modules of the pipeline, particularly the MiniCourt which uses them to compute the homographic transformation required to project real-world player positions and ball locations onto a standardized mini-court representation. 
-Moreover, the player tracking and filtering module leverages the court keypoints to select and assign player identities based on their positions relative to the court layout.
-% Don't know if I have to talk about the MiniCourt or if someone else will do it
-Finally, the CourtLineDetector provides utility functions for drawing both the detected keypoints and the corresponding court lines onto video frames. 
-These visualizations are instrumental for debugging, performance evaluation, and demonstration purposes, ensuring transparency in the detection process and facilitating qualitative assessment by human observers.
+\paragraph{Integration with the System.}  
+The detected keypoints are employed to compute the homography matrix $\mathbf{H}$ between the video frame and a canonical court template.
+This transformation is later used to project player positions and ball trajectories onto a unified reference system (Mini Court), ensuring spatial consistency across frames.  
+Moreover, the refined keypoints serve as the basis for player filtering (selecting the two main players on court) and are also dynamically redrawn on each frame for visual feedback.
+
+\subsection{Mini Court}
+After detecting the court keypoints in the input video, we leverage them to compute a geometric transformation that maps player positions and ball trajectories into a standardized, scaled-down representation of the tennis court, the mini-court.
+This projection serves multiple purposes within the system: it allows a normalized visualization of the player and ball positions regardless of camera angle or zoom, enables the generation of tactical heatmaps and statistical overlays, and facilitates trajectory analysis in a compact and consistent reference frame.
+The mini-court is drawn within a fixed area of the video frame, in a reserved overlay zone. Its geometry strictly follows the real proportions of a tennis court, with accurate scaling based on standard court measurements.
+To project detected elements in the mini-court, we compute a homography matrix between the detected court keypoints in the original frame and their corresponding points on the mini-court template. The homography is estimated using the Direct Linear Transformation algorithm and refined with RANSAC to ensure robustness against outliers.
+This allows us to plot player positions, ball trajectories, and events (such as hits or bounces) on the mini-court over time. We also compute additional statistics from these projected coordinates, such as player coverage heatmaps, ball landing distributions, and shot trajectories with visual animations.
+Furthermore, the mini-court supports visualization utilities to draw court lines, keypoints, trajectories, and detection points with dynamic annotations (e.g., colored player positions based on side of the court), moreover it can display a heatmap overlay that indicates the scoring probability.
+The mini-court thus acts as a central visualization and analysis tool in our pipeline, directly integrating data from the CourtLineDetector, the player tracker, and the ball tracker modules.
+
+The mini-court projection uses the detected keypoints to compute a homography matrix $H$ such that:
+\[
+ p' = H \cdot p
+\]
+where $p$ is a point in the video frame and $p'$ is the corresponding point in the mini-court coordinate system. The homography is estimated using the Direct Linear Transformation algorithm and refined with RANSAC.
+
+% TODO Add details about the mini-court drawing, the homography, the heatmap, player and ball tracking and scoring probability.
 
 \subsection{Stat Box}
 
@@ -87,4 +141,72 @@ The different metrics displayed are:
     \item Distance covered by the player
 \end{itemize}
 
+%! Actual report part ------ Still a draft WIP -----
+
+\subsection{Stat Box: Real-Time Player Statistics}
+
+The \textbf{Stat Box} is a dynamic overlay designed to display real-time statistics of the selected player during video playback.  
+Its purpose is to offer an intuitive summary of the player's performance, updated continuously as the match unfolds, thus enabling both visual feedback and analytical insights.
+
+The Stat Box is rendered directly onto each video frame using OpenCV functions, ensuring high readability without obstructing critical game visuals.
+
+\paragraph{Displayed Metrics (Single-Player Mode).}  
+In single-player mode, the Stat Box reports the following statistics:
+\begin{itemize}
+    \item \textbf{Player Speed}: The instantaneous speed of the player at the current frame.
+    \item \textbf{Average Player Speed}: The average player speed, updated after each opponent’s shot.
+    \item \textbf{Shot Speed}: The speed of the player's last shot, measured between the hit and the ball's landing.
+    \item \textbf{Minimum Shot Speed}: The slowest shot performed by the player so far.
+    \item \textbf{Maximum Shot Speed}: The fastest shot performed by the player so far.
+    \item \textbf{Average Shot Speed}: The mean speed of all shots played by the player.
+    \item \textbf{Hits Counter}: The total number of shots performed by the player.
+    \item \textbf{Distance Covered}: The cumulative distance traveled by the player.
+\end{itemize}
+
+\paragraph{Metric Computation.}  
+The calculation of these metrics integrates multiple components of our system, including \textbf{player tracking}, \textbf{ball tracking}, \textbf{mini-court projection}, and \textbf{racket hit detection}.  
+
+For each detected racket hit, the responsible player is identified based on spatial proximity in the mini-court reference system. Once a hit is confirmed:
+\begin{itemize}
+    \item The hit counter is incremented.
+    \item The shot speed is computed as:
+    \[
+    v_{\text{shot}} = \frac{d_{\text{hit, bounce}}}{t_{\text{hit, bounce}}}
+    \]
+    where $d_{\text{hit, bounce}}$ is the Euclidean distance between hit and bounce positions (converted from pixels to meters), and $t_{\text{hit, bounce}}$ is the time difference between these events (derived from the frame difference and video frame rate).
+    
+    The conversion from pixels to meters leverages the known scaling factor of the court:
+    \[
+    d_{\text{meters}} = d_{\text{pixels}} \cdot \frac{h_{\text{court}}^{\text{meters}}}{h_{\text{court}}^{\text{pixels}}}
+    \]
+    The resulting velocity is converted to kilometers per hour:
+    \[
+    v_{\text{km/h}} = v_{\text{m/s}} \cdot 3.6
+    \]
+\end{itemize}
+  
+Shot speed statistics (\textit{min}, \textit{max}, \textit{average}) are updated after each hit.
+
+\paragraph{Player Speed and Movement.}  
+Player speed is continuously updated by computing the displacement between consecutive frames within the mini-court reference:
+\[
+v_{\text{player}} = \frac{d_{\text{frame-to-frame}}}{t_{\text{frame}}}
+\]
+The cumulative distance $D_{\text{total}}$ covered by the player is computed as:
+\[
+D_{\text{total}} = \sum_{i=1}^{n} d_{\text{frame}_i}
+\]
+where $d_{\text{frame}_i}$ is the displacement between frames, and $t_{\text{frame}} = \frac{1}{\text{FPS}}$.
+
+Additionally, after each opponent's shot, the average player speed is recalculated based on the total displacement covered in the interval between two consecutive shots.
+
+\paragraph{Two-Player Mode.}  
+In dual-player mode, the Stat Box is partitioned to display the statistics of both players side by side, allowing direct performance comparison.
+% TODO: Add details
+
+\paragraph{Integration and Visualization.}  
+All metrics are updated in real time during video playback and visualized within the Stat Box overlay.  
+This module not only provides immediate feedback to the user but also functions as a comprehensive performance summary layer, enriching the analytical dimension of the system.
+
+\subsection{Video Scraping} % TODO: Write this part
 
