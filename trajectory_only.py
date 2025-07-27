@@ -120,7 +120,7 @@ def main():
 
     counter  = 0
     # Change here which videos to get data from
-    video_numbers = [i for i in range(1000,1020)] + [i for i in range(1021,1024)] + [i for i in range(1025,1027)] + [i for i in range(1028,1031)] + [i for i in range(1032,1041)] + [i for i in range(1042,1045)] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
+    video_numbers = [1022]#[i for i in range(1000,1020)] + [i for i in range(1021,1024)] + [i for i in range(1025,1027)] + [i for i in range(1028,1031)] + [i for i in range(1032,1041)] + [i for i in range(1042,1045)] #[100,101,102,103,105,107,108,109,110,111,112,113,114,115,116,117,118]
 
     for video_number in video_numbers:
 
@@ -216,7 +216,7 @@ def main():
         mini_court_keypoints = mini_court.drawing_key_points
 
 
-        # Get the first hit with less refined audio finding
+        # Get the first hit with less refined audio finding (higher prominence)
 
         first_hit = (get_ball_shot_frames_audio(input_video_path_audio, fps, height = 0.01, prominence=0.01))[0]
         ball_shots_frames_visual = get_ball_shot_frames_visual(ball_detections_YOLO, fps, mode = 'yolo')
@@ -228,7 +228,7 @@ def main():
                                                   player_boxes = player_mini_court_detections, 
                                                   keypoints = mini_court_keypoints,
                                                   ball_detections = ball_mini_court_detections,
-                                                  max_distance_param = 7,
+                                                #  max_distance_param = 7,
                                                   adjustment = 0,
                                                   MINI_COURT= True,
                                                   CLUSTERING= False)
@@ -313,6 +313,9 @@ def main():
                                    [20,40,85,104],[18,35],[24,41,72,103,137,173,204],[23,40,78,105,152,178,213,241,275,304,336,363,409], [23, 56, 86, 118],
                                    [20, 37, 73, 98, 134, 164, 194, 220, 256, 286, 317, 344, 377], [22, 43, 71], [32, 49, 78], [18, 37, 64]
                                    ]
+        
+
+    
 
         # 1030 : r [23,40,86] b [32,75,]
         # 1032 : r [17, 37,60, 97, 125, 147, 195] b [29,56, 86, 111,174,220]

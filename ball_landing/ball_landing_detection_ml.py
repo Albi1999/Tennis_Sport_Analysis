@@ -21,7 +21,6 @@ class BounceCNN(nn.Module):
         super(BounceCNN, self).__init__()
 
 
-        
         # 1st block
         self.conv1 = nn.Conv2d(1, 8, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(8)
@@ -44,13 +43,13 @@ class BounceCNN(nn.Module):
         
 
        
-        # Adaptive pooling to ensure fixed size regardless of input dimensions 
+        # Adaptive pooling to reduce output size to 64 
         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
         
         # FCNN
-        self.fc1 = nn.Linear(64, 16)
-        self.dropout = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(16, 1)  # Binary output
+        self.fc1 = nn.Linear(64, 64)  # Adjust input size based on pooling
+        self.fc2 = nn.Linear(64, 1) 
+ 
         
     def forward(self, x):
         # Apply convolutional blocks
@@ -72,9 +71,10 @@ class BounceCNN(nn.Module):
         
         # Fully connected layers
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
         x = self.fc2(x)
-        
+
+
+
         return x
 
 
@@ -201,19 +201,23 @@ def evaluate_model(model, test_loader):
     model.eval()
     
     all_predictions = []
+    all_probabilities = [] 
     all_labels = []
     
     with torch.inference_mode():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs).squeeze()
-            predicted = (torch.sigmoid(outputs) > 0.5).float()
+            probabilities = torch.sigmoid(outputs)  # Get probabilities
+            predicted = (probabilities > 0.5).float()
             
             all_predictions.extend(predicted.cpu().numpy())
+            all_probabilities.extend(probabilities.cpu().numpy())  # Store probabilities
             all_labels.extend(labels.cpu().numpy())
     
     # Convert lists to numpy arrays
     all_predictions = np.array(all_predictions)
+    all_probabilities = np.array(all_probabilities)
     all_labels = np.array(all_labels)
     
     # Calculate metrics
@@ -223,17 +227,36 @@ def evaluate_model(model, test_loader):
     f1 = f1_score(all_labels, all_predictions)
     f1_beta = fbeta_score(all_labels, all_predictions, beta=2) # F2 score to give more weight to recall
     
+    # Calculate Precision-Recall AUC metrics (since should be better for imbalanced data than ROC AUC)
+    from sklearn.metrics import precision_recall_curve, average_precision_score
+    pr_auc = average_precision_score(all_labels, all_probabilities)
+    precision_curve, recall_curve, pr_thresholds = precision_recall_curve(all_labels, all_probabilities)
+    
+    # Find optimal threshold (maximizing F1-score)
+    f1_scores = []
+    for thresh in pr_thresholds:
+        pred_thresh = (all_probabilities > thresh).astype(int)
+        if len(np.unique(pred_thresh)) > 1:
+            f1_thresh = f1_score(all_labels, pred_thresh)
+        else:
+            f1_thresh = 0
+        f1_scores.append(f1_thresh)
+    
+    optimal_idx = np.argmax(f1_scores)
+    optimal_threshold = pr_thresholds[optimal_idx]
+    
     print(f"Test Metrics:")
     print(f"Accuracy: {accuracy:.4f}")
     print(f"Precision: {precision:.4f}")
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
     print(f"F2 Score (Recall-oriented): {f1_beta:.4f}")
+    print(f"Precision-Recall AUC: {pr_auc:.4f}") 
+    print(f"Optimal Threshold: {optimal_threshold:.4f}")
     
     # Create and plot confusion matrix
     cm = confusion_matrix(all_labels, all_predictions)
 
-    
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
                 xticklabels=['No Bounce', 'Bounce'],
@@ -248,14 +271,44 @@ def evaluate_model(model, test_loader):
     plt.savefig('output/cnn_training/confusion_matrix.png')
     plt.show()
     
+    # Plot Precision-Recall curve (instead of ROC curve)
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall_curve, precision_curve, color='darkorange', lw=2, 
+             label=f'PR curve (AUC = {pr_auc:.4f})')
+    
+    # Add baseline (random classifier performance for imbalanced data)
+    baseline = np.sum(all_labels) / len(all_labels)  # Proportion of bounce examples
+    plt.axhline(y=baseline, color='navy', lw=2, linestyle='--', 
+                label=f'Random classifier (AP = {baseline:.3f})')
+    
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision-Recall Curve')
+    plt.legend(loc="lower left")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Save the PR plot
+    plt.savefig('output/cnn_training/precision_recall_curve.png')
+    plt.show()
+    
     return {
         'accuracy': accuracy,
         'precision': precision,
         'recall': recall,
         'f1': f1,
         'f1_beta': f1_beta,
-        'confusion_matrix': cm
+        'confusion_matrix': cm,
+        'pr_auc': pr_auc,  
+        'precision_curve': precision_curve, 
+        'recall_curve': recall_curve, 
+        'pr_thresholds': pr_thresholds,  
+        'optimal_threshold': optimal_threshold
     }
+
+
 
 def make_prediction(model, best_model_path, input_frames_directory, transform, device):
     """Uses BounceDataset for consistent processing"""
@@ -447,11 +500,15 @@ if __name__ == "__main__":
 
     # Initialize and train model
     model = BounceCNN()
-    trained_model = train_model(model, train_loader, val_loader, num_epochs = 100, factor = factor) # Comment this line if you want to skip training
+   # trained_model = train_model(model, train_loader, val_loader, num_epochs = 100, factor = factor) # Comment this line if you want to skip training
     
     # Load best model
     model.load_state_dict(torch.load('models/best_bounce_model.pth'))
     metrics = evaluate_model(model, test_loader)
+
+
+
+
     
     
     

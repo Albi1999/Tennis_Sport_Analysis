@@ -88,10 +88,10 @@ def remove_outliers(ball_track, dists, max_dist = 50):
     """
     outliers = list(np.where(np.array(dists) > max_dist)[0])
     for i in outliers:
-        if (dists[i+1] > max_dist) | (dists[i+1] == -1):       
+        if (dists[i+1] > max_dist) | (dists[i+1] == -1):    
             ball_track[i] = (None, None)
             outliers.remove(i)
-        elif dists[i-1] == -1:
+        elif dists[i-1] == -1:    
             ball_track[i-1] = (None, None)
     return ball_track  
 
@@ -284,18 +284,21 @@ def get_ball_shot_frames_visual(ball_positions,fps, mode = 'tracknet'):#, area):
     df_ball_positions = pd.DataFrame(ball_positions,columns=['x','y'])
    # df_ball_positions = df_ball_positions.iloc[area[0]:area[1]]
     # Create a rolling window for the y positions
-    window_size = max(10, fps // 5)  # Adaptive window size based on fps
-    df_ball_positions['y_rolling_mean'] = df_ball_positions['y'].rolling(window=window_size, min_periods=1, center=False).mean()
+    window_size = int(fps * 0.4) # 0.4 second windows  # TODO : old one was this #max(10, fps // 5) 
+    df_ball_positions['y_rolling_mean'] = df_ball_positions['y'].rolling(window=window_size, min_periods=1, center=True).mean() # TODO : before : center False, but True makes more sense
   #  df_ball_positions['delta_y'] = df_ball_positions['y_rolling_mean'].diff()
     df_ball_positions['ball_hit'] = 0
 
-  #  plt.plot(df_ball_positions['y_rolling_mean'])
-   # plt.savefig("VISUAL.png")
+    plt.plot(df_ball_positions['y_rolling_mean'])
+    plt.xlabel('Frame Number')
+    plt.ylabel('Ball y coordinate (rolling mean)')
+    plt.title('Ball y coordinate (rolling mean) over time')
+    plt.savefig("VISUAL.png")
 
 
 
-    # Make this small to catch as much as possible
-    minimum_change_frames_for_hit = max(5, fps//20)
+    # Make this small to catch as much as possible, but large enough such that it is not too much influenced by false tracking (i.e if one/two frames see something else)
+    minimum_change_frames_for_hit = int(fps * 0.2) #max(5, fps//20) 
 
 
     for i in range(len(df_ball_positions)- int(minimum_change_frames_for_hit)):
@@ -324,14 +327,14 @@ def get_ball_shot_frames_visual(ball_positions,fps, mode = 'tracknet'):#, area):
             
             if all(array_check) and len(array_check) > 0:
                 df_ball_positions['ball_hit'].iloc[i] = 1
+            '''
             else:
                 # In this case, we smooth the current area even more to make another check (its possible that we have some fluctuation around the min/max due to
                 # the ball tracker not being perfectly consistent)
-                for window_size_curr in [15,20,25,30]:
+                for window_size_curr in [int(fps * 0.6), int(fps * 0.8), int(fps * 0.9)]:  # TODO : old one was this #[15,20,25,30]:
                     array_check = []
-                    df_ball_y_positions_of_interest = df_ball_positions['y'].rolling(window=window_size_curr, min_periods=1, center=False).mean()
+                    df_ball_y_positions_of_interest = df_ball_positions['y'].rolling(window=window_size_curr, min_periods=1, center=True).mean()
 
-                    # Rerun the same code as above , # TODO : do this in a function so it is a simple call
                     # Check the area around the current position we are looking at
                     for change_frame in range(i- int(minimum_change_frames_for_hit), i+ int(minimum_change_frames_for_hit)):
                         # Exclude the min/max to be checked
@@ -347,6 +350,7 @@ def get_ball_shot_frames_visual(ball_positions,fps, mode = 'tracknet'):#, area):
                     if all(array_check) and len(array_check) > 0:
                         df_ball_positions['ball_hit'].iloc[i] = 1
                         break
+            '''
 
 
     hit_frames = df_ball_positions[df_ball_positions['ball_hit']==1].index.tolist()
@@ -369,7 +373,7 @@ def get_ball_shot_frames_audio(audio_file, fps, height=0.01, distance_c = 0.25, 
     # Compute the envelope of the filtered signal
     y_abs = np.abs(y_filtered)
     
-    # Apply smoothing to the envelope (adjust window_size as needed)
+    # Apply smoothing to the envelope 
     window_size = int(0.01 * sr)  # 10ms window
     y_envelope = np.convolve(y_abs, np.ones(window_size)/window_size, mode='same')
     
@@ -389,44 +393,29 @@ def get_ball_shot_frames_audio(audio_file, fps, height=0.01, distance_c = 0.25, 
     if plot:
         plt.figure(figsize=(12, 10))
         
+        # Convert audio samples to frame numbers for plotting
+        frame_numbers = np.linspace(0, len(y_filtered) * fps / sr, len(y_filtered))
+        
         # Plot filtered waveform with detected hits
         plt.subplot(3, 1, 1)
-        times = np.linspace(0, len(y_filtered)/sr, len(y_filtered))
-        plt.plot(times, y_filtered)
-        plt.vlines(hit_times, -0.2, 0.2, color='r', linewidth=1)
+        plt.plot(frame_numbers, y_filtered)
+        plt.vlines(hit_frames, -0.2, 0.2, color='r', linewidth=1)
         plt.title('Filtered Audio Waveform (150Hz-1800Hz) with Detected Hits')
-        plt.xlabel('Time (s)')
+        plt.xlabel('Frame Number')
         
         # Plot the envelope with detected peaks
         plt.subplot(3, 1, 2)
-        plt.plot(times, y_envelope)
-        plt.vlines(hit_times, 0, np.max(y_envelope), color='r', linewidth=1, label='Detected Hits')
+        plt.plot(frame_numbers, y_envelope)
+        plt.vlines(hit_frames, 0, np.max(y_envelope), color='r', linewidth=1, label='Detected Hits')
         plt.title('Signal Envelope with Detected Peaks')
-        plt.xlabel('Time (s)')
+        plt.xlabel('Frame Number')
         plt.legend()
-        
-        # Plot frame numbers
-        plt.subplot(3, 1, 3)
-        frame_times = np.arange(0, len(y_filtered)/sr, 1/fps)
-        frame_indices = np.arange(0, len(frame_times))
-        if len(frame_times) > 1000:  # If too many frames, subsample for clarity
-            step = len(frame_times) // 1000
-            frame_times = frame_times[::step]
-            frame_indices = frame_indices[::step]
-        plt.plot(frame_times, frame_indices, 'b-', alpha=0.5)
-        plt.scatter([hit_times], [hit_frames], color='r', s=50)
-        for i, (t, f) in enumerate(zip(hit_times, hit_frames)):
-            plt.annotate(f"Frame {f}", (t, f), xytext=(5, 5), textcoords='offset points')
-        plt.title('Detected Hits by Frame Number')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Frame Number')
         
         plt.tight_layout()
         plt.savefig("AUDIO.png")
         # plt.show()
     
-
-    return hit_frames 
+    return hit_frames
 
 
 
@@ -556,7 +545,7 @@ def cluster_court_positions(hits):
     return clusters
 
 
-def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps, player_boxes, ball_detections, keypoints, max_distance_param = 10, adjustment = 150, MINI_COURT = False, net_y = 450, CLUSTERING = False):
+def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps, player_boxes, ball_detections, keypoints, max_distance_param = 10,MINI_COURT = False, net_y = 450, CLUSTERING = False):
     """
     Idea is that audio will detect every little peak in audio and therefore also a lot of wrong
     information (shoe sounds, players moaning, crowd screaming etc.). We try to refine that by
@@ -568,10 +557,6 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
     is close to one player (indicating that a racket hit is happening). This is in order
     to make the racket hit detection even more robust.
 
-
-
-    adjustment is used to adjust for the fact that the ball is in the air and such the 
-    keypoint coordinates are not directly perfect.
 
     max_distance_param would probably need video-to-video tuning.
     """
@@ -643,13 +628,27 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
         for clustered_hit_frame in clustered_final_racket_hits:
             curr_min = np.inf
             correct_hit_frame = 0
+            print(clustered_hit_frame)
+
+
             for hit_frame in clustered_hit_frame:
-                # if it is out of 
-                # TODO : better logic & fix !!!
-                if ball_detections[hit_frame[0]][1][1] < keypoints[1] \
-                    or ball_detections[hit_frame[0]][1][1] > keypoints[5]:
-                    correct_hit_frame = hit_frame[0]
-                    break
+                distances = []
+                
+                #find all ball detections that are behind he court line and take the one that has
+                #  the highest distance to the respective keypoint on the current side in terms of being completely out of the field
+     
+            #    if ball_detections[hit_frame[0]][1][1] < keypoints[1]:
+                    # Measure y-distance 
+            #        dist_ball_court = keypoints[1] - ball_detections[hit_frame[0]][1][1]
+            #        distances.append((hit_frame[0], dist_ball_court))
+                
+
+
+             #   elif ball_detections[hit_frame[0]][1][1] > keypoints[5]:
+             #       dist_ball_court = ball_detections[hit_frame[0]][1][1] - keypoints[5]
+             #       distances.append((hit_frame[0], dist_ball_court))
+
+
 
                 # Calculate the euclidean distances of players to the possible hits and find the minimal one
                 dist_0 = int(euclidean_distance(tuple(map(int, ball_detections[hit_frame[0]][1])), player_0_pos[hit_frame[0]]))
@@ -659,6 +658,9 @@ def combine_audio_visual(ball_shots_frames_visual, ball_shots_frames_audio, fps,
                     correct_hit_frame = hit_frame[0]
                     curr_min = found_min 
             
+            # If there was a out-of-bounds ball detected, find the one with max distance
+          #  if distances:
+          #      correct_hit_frame = max(distances, key = lambda x:x[1])[0]
             complete_final_racket_hits.append(correct_hit_frame)
 
         return sorted(list(set(complete_final_racket_hits)))

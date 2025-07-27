@@ -40,12 +40,19 @@ def read_video(video_path): # TODO : read in fps I think so we can reuse
 
 
 def save_video(output_video_frames, output_video_path, fps):
+    """
+    This function saves a list of video frames as an MP4 video file. 
+    It extracts frame dimensions from the first frame, sets up MP4 compression, 
+    creates a VideoWriter object with the specified output path and fps, writes each frame 
+    sequentially to the video file, and finalizes the output.
+    
+    """
 
     # Get shape of frames (since same video, just look at the first frame)
     height, width = output_video_frames[0].shape[0], output_video_frames[0].shape[1]
 
     # Set compression method 
-    compression_method = cv2.VideoWriter_fourcc(*'mp4v') # instead of MJPG compression
+    compression_method = cv2.VideoWriter_fourcc(*'mp4v') 
 
     # Compress each frame
     out = cv2.VideoWriter(output_video_path, compression_method, fps, (width, height))
