@@ -12,7 +12,40 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import sys 
 import pickle 
+from sklearn.cluster import DBSCAN
+import pandas as pd 
 sys.path.append('../')
+#from ..utils import cluster_series  
+
+
+
+def cluster_series(arr, eps=3, min_samples=2, delay=2):
+    """Cluster a series of frames and return the minimum value of each cluster with a delay adjustment."""
+    if len(arr) == 0:
+        print("No ball landing frames detected.")
+        return []
+    
+    else:
+        arr = np.array(sorted(map(int, arr))).reshape(-1, 1)
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+        labels = dbscan.fit_predict(arr)
+        
+        df = pd.DataFrame({'Value': arr.flatten(), 'Cluster': labels})
+        
+        # Filter out the outliers (cluster label -1)
+        df = df[df['Cluster'] != -1]
+        
+        min_values = df.groupby('Cluster')['Value'].min().reset_index()
+        min_values['Value'] -= delay  # Apply delay adjustment
+
+
+      #  final_values = []
+      #  for i in min_values.values.tolist():
+      #      final_values.append(i[1])
+
+
+        return min_values['Value'].values.tolist()
+        
 
 
 
@@ -194,7 +227,7 @@ def compute_mean_std(dataset):
     std /= total_samples
     return torch.tensor([mean]), torch.tensor([std])
 
-def evaluate_model(model, test_loader):
+def evaluate_model(model, test_loader, exact_frames = None, tolerance = 3):
     print("Evaluating Model...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -219,6 +252,11 @@ def evaluate_model(model, test_loader):
     all_predictions = np.array(all_predictions)
     all_probabilities = np.array(all_probabilities)
     all_labels = np.array(all_labels)
+
+
+   # mask = np.array(predictions) == 1
+   # img_idxs_bounce = np.array(img_idxs)[mask].tolist()
+   # ball_landing_frames = cluster_series(img_idxs_bounce)
     
     # Calculate metrics
     accuracy = accuracy_score(all_labels, all_predictions)
@@ -339,7 +377,7 @@ def make_prediction(model, best_model_path, input_frames_directory, transform, d
     # Create dummy labels
     dummy_labels = [0] * len(img_paths)
     
-    # Use your existing dataset class
+
     dataset = BounceDataset(image_paths=img_paths, labels=dummy_labels, transform=transform)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     
@@ -360,7 +398,6 @@ def make_prediction(model, best_model_path, input_frames_directory, transform, d
     return predictions, confidences, img_idxs
 
 
-# TODO : need it in the final .py file (main.py) , so we have to down below clean up the code a bit (put into a utils file the transformations, mean calculation etc.)
 def evaluation_transform(mean, std):
 
     eval_transform = transforms.Compose([
@@ -500,11 +537,13 @@ if __name__ == "__main__":
 
     # Initialize and train model
     model = BounceCNN()
-   # trained_model = train_model(model, train_loader, val_loader, num_epochs = 100, factor = factor) # Comment this line if you want to skip training
+    trained_model = train_model(model, train_loader, val_loader, num_epochs = 100, factor = factor) # Comment this line if you want to skip training
     
     # Load best model
     model.load_state_dict(torch.load('models/best_bounce_model.pth'))
     metrics = evaluate_model(model, test_loader)
+
+
 
 
 
