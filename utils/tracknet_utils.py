@@ -872,6 +872,100 @@ def convert_ball_detection_to_bbox(ball_track, padding=5):
 
     return lst_of_bboxes
 
+def filter_ball_shots_by_player(ball_shots_frames, player_detections, ball_detections):
+    """
+    Filters ball shot frames into two lists - one for upper player and one for lower player.
+    The first shot is assigned to the player whose upper bbox y-coordinate is closest to the ball, then alternates.
+    
+    Args:
+        ball_shots_frames (list): Sorted list of frame numbers where ball shots were detected
+        player_detections (list): List of dictionaries containing player bounding boxes for each frame
+        ball_detections (list): List of dictionaries containing ball positions for each frame
+        
+    Returns:
+        tuple: (upper_player_shots, lower_player_shots) - Lists of frame numbers for each player's shots
+    """
+    if not ball_shots_frames or len(player_detections) == 0 or len(ball_detections) == 0:
+        return [], []
+    
+    # Get the first ball shot frame
+    first_shot_frame = ball_shots_frames[0]
+    
+    # Check if the first shot frame is within range
+    if (first_shot_frame >= len(player_detections) or 
+        first_shot_frame >= len(ball_detections) or
+        1 not in ball_detections[first_shot_frame]):
+        print("Warning: Cannot determine first player. Using default assignment.")
+        # Default assignment if we can't determine
+        upper_player_shots = ball_shots_frames[::2]  # Even indices: 0, 2, 4, ...
+        lower_player_shots = ball_shots_frames[1::2]  # Odd indices: 1, 3, 5, ...
+        return upper_player_shots, lower_player_shots
+    
+    # Get ball position at first shot
+    ball_pos = ball_detections[first_shot_frame][1]
+    
+    # Get player positions at first shot frame
+    player_positions = player_detections[first_shot_frame]
+    
+    # Get all player IDs
+    all_player_ids = list(player_positions.keys())
+    if len(all_player_ids) < 2:
+        print("Warning: Less than 2 players detected. Cannot assign shots properly.")
+        return [], []
+    
+    # Determine which player is upper and which is lower based on y-coordinate
+    player_y_positions = {}
+    for player_id, player_bbox in player_positions.items():
+        # Use center y-coordinate of bbox to determine upper vs lower player
+        y_center = (player_bbox[1] + player_bbox[3]) / 2
+        player_y_positions[player_id] = y_center
+    
+    # Sort players by y-coordinate (smaller y = upper, larger y = lower)
+    sorted_players = sorted(player_y_positions.items(), key=lambda x: x[1])
+    upper_player_id = sorted_players[0][0]  # Player with smaller y-coordinate
+    lower_player_id = sorted_players[1][0]  # Player with larger y-coordinate
+    
+    # Find the player whose upper bbox y-coordinate is closest to the ball's y-coordinate for the first shot
+    min_y_distance = float('inf')
+    serving_player_id = None
+    
+    for player_id, player_bbox in player_positions.items():
+        # Get the upper y-coordinate of the player's bounding box
+        # player_bbox format: [x_min, y_min, x_max, y_max]
+        y_upper = player_bbox[1]  # Top of the bounding box
+        
+        # Calculate the absolute difference in y-coordinates between ball and player's upper bbox
+        y_distance = abs(ball_pos[1] - y_upper)
+        
+        if y_distance < min_y_distance:
+            min_y_distance = y_distance
+            serving_player_id = player_id
+    
+    if serving_player_id is None:
+        print("Warning: Could not find closest player. Using default assignment.")
+        # Default assignment
+        upper_player_shots = ball_shots_frames[::2]
+        lower_player_shots = ball_shots_frames[1::2]
+        return upper_player_shots, lower_player_shots
+    
+    # Assign shots alternately, starting with the serving player
+    serving_player_shots = []
+    receiving_player_shots = []
+    
+    for i, shot_frame in enumerate(ball_shots_frames):
+        if i % 2 == 0:  # Even indices: 0, 2, 4, ... (serving player)
+            serving_player_shots.append(shot_frame)
+        else:  # Odd indices: 1, 3, 5, ... (receiving player)
+            receiving_player_shots.append(shot_frame)
+    
+    # Return shots in the order (upper_player_shots, lower_player_shots)
+    if serving_player_id == upper_player_id:
+        # Serving player is the upper player
+        return serving_player_shots, receiving_player_shots
+    else:
+        # Serving player is the lower player
+        return receiving_player_shots, serving_player_shots
+
 def filter_ball_detections_by_player(frames, ball_mini_court_detections, minicourt):
     """
     Filters ball detection frames into two lists - one for upper player and one for lower player.

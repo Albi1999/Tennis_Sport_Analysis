@@ -11,6 +11,7 @@ from utils import (read_video,
                    detect_frames_TRACKNET,
                    cluster_series,
                    filter_ball_detections_by_player,
+                   filter_ball_shots_by_player,
                    draw_debug_window,
                    draw_frames_number,
                    draw_ball_landings,
@@ -46,23 +47,25 @@ def main():
     
     # Draw Options
     DRAW_MINI_COURT = True
-    DRAW_STATS_BOX = False
-    COMPUTE_PROBABILITIES = False
+    DRAW_STATS_BOX = True
+    COMPUTE_PROBABILITIES = True  # Whether to compute and draw probabilities on the mini court (can be slow)
 
     # Debugging Mode to use ground truth values for racket hits and ball landings (if available)
-    DEBUG = False
+    DEBUG = True
+    DRAW_DEBUG_WINDOW = True  # Whether to draw the debug window with all info (can be cluttered)
 
     # Video Number to run inference on
-    VIDEO_NUMBER = 1003
+    VIDEO_NUMBER = 101
     print(f"Running inference on video {VIDEO_NUMBER}")
     
     # Insert ground truth values for the racket hits and ball landings for best accuracy
     GT_BOUNCES_FRAMES = []
     GT_RACKET_HITS_FRAMES = []
+    GT_SERVE_PLAYER = None  # 'Upper' or 'Lower' if known, else None
 
     # Video Paths (data/new_input_videos/)
-    INPUT_VIDEO_PATH = f'data/new_input_videos/input_video_{VIDEO_NUMBER}.mp4'  #
-    INPUT_VIDEO_PATH_AUDIO = f'data/new_input_videos/input_video_{VIDEO_NUMBER}_audio.mp3'
+    INPUT_VIDEO_PATH = f'data/input_video{VIDEO_NUMBER}.mp4'  #
+    INPUT_VIDEO_PATH_AUDIO = f'data/input_video{VIDEO_NUMBER}_audio.mp3'
     OUTPUT_VIDEO_PATH = f'output/final/output_video{VIDEO_NUMBER}.mp4'
 
     # Check if we already processed that video by looking if output with video number reference exists (for faster testing)
@@ -138,7 +141,7 @@ def main():
 
     # Convert player positions to mini court positions
     player_mini_court_detections, ball_mini_court_detections = mini_court.convert_bounding_boxes_to_mini_court_coordinates(player_detections,
-                                                                                                                            ball_detections_YOLO,
+                                                                                                                            ball_detections,
                                                                                                                             refined_keypoints,
                                                                                                                             chosen_players_ids)
     
@@ -233,37 +236,63 @@ def main():
             case 101:
                 GT_RACKET_HITS_FRAMES = [12, 28, 58, 89, 118, 153, 179, 211, 243, 283]
                 GT_BOUNCES_FRAMES = [20,50,77,106,138,168,197,230,270,301]
+                GT_SERVE_PLAYER = 'Upper'
                 
             case 103:
                 GT_RACKET_HITS_FRAMES = [14, 32, 83]
                 GT_BOUNCES_FRAMES = [23, 66, 97]
+                GT_SERVE_PLAYER = 'Lower'
+
                 
             case 105:
                 GT_RACKET_HITS_FRAMES = [34, 54, 91, 126, 162, 187, 222, 257]
-                GT_BOUNCES_FRAMES = [48, 88, 115, 146, 186, 208, 256, 269]   
+                GT_BOUNCES_FRAMES = [48, 88, 115, 146, 186, 208, 256, 269] 
+            
+            case 107:
+                GT_RACKET_HITS_FRAMES = [58, 84, 119, 144, 182, 219, 256]
+                GT_BOUNCES_FRAMES = [69, 108, 133, 175, 201, 255, 278]
+                GT_SERVE_PLAYER = 'Lower'  
+            
+            case 109:
+                GT_RACKET_HITS_FRAMES = [23, 50, 90, 130, 170, 210, 250]
+                GT_BOUNCES_FRAMES = [34, 77, 115, 155, 195, 235, 275]
+                GT_SERVE_PLAYER = 'Lower'
                 
             case 116:
                 GT_RACKET_HITS_FRAMES = [1, 22, 62]
                 GT_BOUNCES_FRAMES = [13, 52, 82]
+                GT_SERVE_PLAYER = 'Upper'
+
             
             case 1009:
                 GT_RACKET_HITS_FRAMES = [1, 11, 47]
                 GT_BOUNCES_FRAMES = [3, 37, 68]
+                GT_SERVE_PLAYER = 'Upper'
+
                 
             case 1010:
                 GT_RACKET_HITS_FRAMES = [10, 32, 65, 98, 135, 166, 192, 222, 257, 286, 316, 348, 393, 423, 456, 482, 514, 543, 569, 601, 647, 676, 717, 750, 784, 816]
                 GT_BOUNCES_FRAMES = [23, 54, 84, 125, 153, 183, 214, 242, 275, 304, 336, 383, 416, 444, 477, 503, 531, 565, 591, 636, 664, 711, 739, 769, 805, 836]
-            
+                GT_SERVE_PLAYER = 'Upper'
+
             case 1012:
                 GT_RACKET_HITS_FRAMES = [23, 42, 74]
                 GT_BOUNCES_FRAMES = [34, 65, 90]  
+                GT_SERVE_PLAYER = 'Upper'
+
                 
             case 1026:
                 GT_RACKET_HITS_FRAMES = [8, 28, 59, 103]
                 GT_BOUNCES_FRAMES = [19, 51, 95, 128]  
+                GT_SERVE_PLAYER = 'Upper'
 
-        upper_court_balls_frames = GT_BOUNCES_FRAMES[1::2]    
-        lower_court_balls_frames = GT_BOUNCES_FRAMES[::2]
+                
+        if GT_SERVE_PLAYER == 'Upper':
+            upper_court_balls_frames = GT_BOUNCES_FRAMES[1::2]    
+            lower_court_balls_frames = GT_BOUNCES_FRAMES[::2]
+        else:
+            upper_court_balls_frames = GT_BOUNCES_FRAMES[::2]    
+            lower_court_balls_frames = GT_BOUNCES_FRAMES[1::2]
         print(f"Upper Court Bounce Frames Corrected : {upper_court_balls_frames}")
         print(f"Lower Court Bounce Frames Corrected : {lower_court_balls_frames}")    
         
@@ -292,12 +321,28 @@ def main():
 
     # Get the racket hit frames for the player (only needed for probabilities or debugging)
     if COMPUTE_PROBABILITIES or DEBUG:
-        ball_shots_frames_upper, ball_shots_frames_lower = filter_ball_detections_by_player(ball_shots_frames_stats, ball_mini_court_detections, mini_court)
+        ball_shots_frames_upper, ball_shots_frames_lower = filter_ball_shots_by_player(ball_shots_frames_stats, player_detections, ball_detections)
         print(f"Ball Shots Upper Player: {ball_shots_frames_upper}")
         print(f"Ball Shots Lower Player: {ball_shots_frames_lower}")
         
-        ball_shots_frames_upper = GT_RACKET_HITS_FRAMES[::2]
-        ball_shots_frames_lower = GT_RACKET_HITS_FRAMES[1::2]
+        # Check if both lists have elements before accessing them
+        if len(ball_shots_frames_upper) > 0 and len(ball_shots_frames_lower) > 0:
+            if ball_shots_frames_upper[0] < ball_shots_frames_lower[0]:
+                serve_player = 'Upper'
+            else:
+                serve_player = 'Lower'
+            print(f"The Player who serves is: {serve_player}")
+        else:
+            print(f"Warning: Cannot determine serving player - Upper shots: {len(ball_shots_frames_upper)}, Lower shots: {len(ball_shots_frames_lower)}")
+            serve_player = 'Unknown'
+        
+        if GT_SERVE_PLAYER == 'Upper':
+            ball_shots_frames_upper = GT_RACKET_HITS_FRAMES[::2]
+            ball_shots_frames_lower = GT_RACKET_HITS_FRAMES[1::2]
+        elif GT_SERVE_PLAYER == 'Lower':
+            ball_shots_frames_upper = GT_RACKET_HITS_FRAMES[1::2]
+            ball_shots_frames_lower = GT_RACKET_HITS_FRAMES[::2]
+            
         print(f"Corrected Ball Shots Upper Player: {ball_shots_frames_upper}")
         print(f"Corrected Ball Shots Lower Player: {ball_shots_frames_lower}")
         
@@ -307,7 +352,7 @@ def main():
                 serve_player = 'Upper'
             else:
                 serve_player = 'Lower'
-            print(f"The Player who serves is: {serve_player}")
+            print(f"The Corrected Player who serves is: {serve_player}")
         else:
             print(f"Warning: Cannot determine serving player - Upper shots: {len(ball_shots_frames_upper)}, Lower shots: {len(ball_shots_frames_lower)}")
             serve_player = 'Unknown'
@@ -482,7 +527,7 @@ def main():
     ######## DRAW OUTPUT ########
     
     # Draw Player Detection
-    output_frames = player_tracker.draw_ellipse_bboxes(video_frames, player_detections, SELECTED_PLAYER)
+    output_frames = player_tracker.draw_ellipse_bboxes(video_frames, player_detections, SELECTED_PLAYER, player_position_to_id)
 
     # Draw Ball Detection
     output_frames = write_track(video_frames, ball_detections_tracknet)
@@ -522,7 +567,7 @@ def main():
 
     # Draw Frames Number, Racket Hits and Ball Landings for debugging purposes
     
-    if DEBUG:
+    if DEBUG and DRAW_DEBUG_WINDOW:
         output_frames = draw_debug_window(output_frames)
         output_frames = draw_frames_number(output_frames)
         output_frames = draw_racket_hits(output_frames, ball_shots_frames_stats)

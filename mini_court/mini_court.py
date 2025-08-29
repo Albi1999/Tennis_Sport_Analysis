@@ -1025,7 +1025,7 @@ class MiniCourt():
             
             # Get text sizes for proper centering
             prob_text = f"Probability: {score_probability:.2f}%"
-            score_text_full = f"Score: {score_text}"
+            score_text_full = f"{score_text}"
             prob_text_size = cv2.getTextSize(prob_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
             score_text_size = cv2.getTextSize(score_text_full, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
             
