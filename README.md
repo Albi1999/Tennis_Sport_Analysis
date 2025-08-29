@@ -77,7 +77,7 @@ git clone https://github.com/danielevirzi/Tennis_Sport_Analysis.git
 pip install -r requirements.txt
 ```
 
-### Run the Application
+### Run the Code
 
 ```bash
 python main.py
