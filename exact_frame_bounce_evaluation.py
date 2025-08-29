@@ -152,7 +152,7 @@ def get_ball_bounce_frames():
         
         # TrackNet
         ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
-        saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=DEVICE)
+        saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=DEVICE, weights_only=False)
         ball_tracker_TRACKNET.load_state_dict(saved_state_dict['model_state'])
         ball_tracker_TRACKNET.to(DEVICE)
         ball_tracker_TRACKNET.eval() 

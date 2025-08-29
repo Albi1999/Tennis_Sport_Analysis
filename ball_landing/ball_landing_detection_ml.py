@@ -350,7 +350,7 @@ def evaluate_model(model, test_loader, exact_frames = None, tolerance = 3):
 
 def make_prediction(model, best_model_path, input_frames_directory, transform, device):
     """Uses BounceDataset for consistent processing"""
-    model.load_state_dict(torch.load(best_model_path, map_location=device))
+    model.load_state_dict(torch.load(best_model_path, map_location=device, weights_only=False))
     model.to(device)
     model.eval()
 
@@ -540,7 +540,7 @@ if __name__ == "__main__":
     trained_model = train_model(model, train_loader, val_loader, num_epochs = 100, factor = factor) # Comment this line if you want to skip training
     
     # Load best model
-    model.load_state_dict(torch.load('models/best_bounce_model.pth'))
+    model.load_state_dict(torch.load('models/best_bounce_model.pth', weights_only=False))
     metrics = evaluate_model(model, test_loader)
 
 

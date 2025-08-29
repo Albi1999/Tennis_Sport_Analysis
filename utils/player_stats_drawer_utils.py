@@ -23,6 +23,11 @@ def draw_player_stats(output_video_frames, player_stats, selected_player=None, p
         selected_player_id = player_mapping[selected_player]
 
     for index, row in player_stats.iterrows():
+        # Safety check to prevent index out of range errors
+        if index >= len(output_video_frames):
+            print(f"Warning: DataFrame has more rows ({len(player_stats)}) than video frames ({len(output_video_frames)}). Stopping at frame {len(output_video_frames)-1}")
+            break
+            
         frame = output_video_frames[index]
         
         # Add player stats to the frame

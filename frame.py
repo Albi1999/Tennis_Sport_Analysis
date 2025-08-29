@@ -26,9 +26,9 @@ def extract_frame(video_path, output_image_path, frame_number):
     cap.release()
 
 # Define input and output paths
-video_path = 'data/input_video2.mp4'
-output_image_path = 'data/input_frame2.jpg'
-frame_number = 40  # Change this to select a different frame
+video_path = 'output/final/output_video101.mp4'
+output_image_path = 'data/output_frame2.jpg'
+frame_number = 103  # Change this to select a different frame
 
 # Extract and save the specified frame
 extract_frame(video_path, output_image_path, frame_number)

@@ -45,7 +45,7 @@ def main():
 
     # Initialize Ball Tracker (TrackNet)
     ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
-    saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location= device)
+    saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location= device, weights_only=False)
     ball_tracker_TRACKNET.load_state_dict(saved_state_dict['model_state'])
     ball_tracker_TRACKNET.to(device)
     ball_tracker_TRACKNET.eval() 

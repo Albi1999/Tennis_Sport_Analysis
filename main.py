@@ -46,22 +46,23 @@ def main():
     
     # Draw Options
     DRAW_MINI_COURT = True
-    DRAW_STATS_BOX = True
+    DRAW_STATS_BOX = False
+    COMPUTE_PROBABILITIES = False
 
-    # Debugging Mode
-    DEBUG = True
+    # Debugging Mode to use ground truth values for racket hits and ball landings (if available)
+    DEBUG = False
 
     # Video Number to run inference on
-    VIDEO_NUMBER = 101
+    VIDEO_NUMBER = 1003
     print(f"Running inference on video {VIDEO_NUMBER}")
     
     # Insert ground truth values for the racket hits and ball landings for best accuracy
     GT_BOUNCES_FRAMES = []
     GT_RACKET_HITS_FRAMES = []
 
-    # Video Paths
-    INPUT_VIDEO_PATH = f'data/input_video{VIDEO_NUMBER}.mp4'  #
-    INPUT_VIDEO_PATH_AUDIO = f'data/input_video{VIDEO_NUMBER}_audio.mp3'
+    # Video Paths (data/new_input_videos/)
+    INPUT_VIDEO_PATH = f'data/new_input_videos/input_video_{VIDEO_NUMBER}.mp4'  #
+    INPUT_VIDEO_PATH_AUDIO = f'data/new_input_videos/input_video_{VIDEO_NUMBER}_audio.mp3'
     OUTPUT_VIDEO_PATH = f'output/final/output_video{VIDEO_NUMBER}.mp4'
 
     # Check if we already processed that video by looking if output with video number reference exists (for faster testing)
@@ -89,7 +90,7 @@ def main():
     
     # TrackNet
     ball_tracker_TRACKNET = BallTrackerNetTRACE(out_channels= 2)
-    saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=DEVICE)
+    saved_state_dict = torch.load('models/tracknet_TRACE.pth', map_location=DEVICE, weights_only=False)
     ball_tracker_TRACKNET.load_state_dict(saved_state_dict['model_state'])
     ball_tracker_TRACKNET.to(DEVICE)
     ball_tracker_TRACKNET.eval() 
@@ -157,7 +158,6 @@ def main():
                                                   keypoints = mini_court_keypoints,
                                                   ball_detections = ball_mini_court_detections,
                                                   max_distance_param = 7,
-                                                  adjustment = 0,
                                                   MINI_COURT= True,
                                                   CLUSTERING= False)
 
@@ -228,34 +228,92 @@ def main():
     # Set the ground truth values for the racket hits and ball landings
     if DEBUG:
         
-        # Example ground truth values for video 101
-        if VIDEO_NUMBER == 101:
-            GT_RACKET_HITS_FRAMES = [12, 28, 58, 89, 118, 153, 179, 211, 243, 283]
-            GT_BOUNCES_FRAMES = [20,50,77,106,138,168,197,230,270,301]
+        # Example ground truth values for videos
+        match VIDEO_NUMBER:
+            case 101:
+                GT_RACKET_HITS_FRAMES = [12, 28, 58, 89, 118, 153, 179, 211, 243, 283]
+                GT_BOUNCES_FRAMES = [20,50,77,106,138,168,197,230,270,301]
+                
+            case 103:
+                GT_RACKET_HITS_FRAMES = [14, 32, 83]
+                GT_BOUNCES_FRAMES = [23, 66, 97]
+                
+            case 105:
+                GT_RACKET_HITS_FRAMES = [34, 54, 91, 126, 162, 187, 222, 257]
+                GT_BOUNCES_FRAMES = [48, 88, 115, 146, 186, 208, 256, 269]   
+                
+            case 116:
+                GT_RACKET_HITS_FRAMES = [1, 22, 62]
+                GT_BOUNCES_FRAMES = [13, 52, 82]
             
-            """
-            ball_shots_frames_stats.remove(115)
-            ball_shots_frames_stats.append(118)
-            ball_shots_frames_stats.remove(123)
-            ball_shots_frames_stats.sort()
-            """
+            case 1009:
+                GT_RACKET_HITS_FRAMES = [1, 11, 47]
+                GT_BOUNCES_FRAMES = [3, 37, 68]
+                
+            case 1010:
+                GT_RACKET_HITS_FRAMES = [10, 32, 65, 98, 135, 166, 192, 222, 257, 286, 316, 348, 393, 423, 456, 482, 514, 543, 569, 601, 647, 676, 717, 750, 784, 816]
+                GT_BOUNCES_FRAMES = [23, 54, 84, 125, 153, 183, 214, 242, 275, 304, 336, 383, 416, 444, 477, 503, 531, 565, 591, 636, 664, 711, 739, 769, 805, 836]
+            
+            case 1012:
+                GT_RACKET_HITS_FRAMES = [23, 42, 74]
+                GT_BOUNCES_FRAMES = [34, 65, 90]  
+                
+            case 1026:
+                GT_RACKET_HITS_FRAMES = [8, 28, 59, 103]
+                GT_BOUNCES_FRAMES = [19, 51, 95, 128]  
+
+        upper_court_balls_frames = GT_BOUNCES_FRAMES[1::2]    
+        lower_court_balls_frames = GT_BOUNCES_FRAMES[::2]
+        print(f"Upper Court Bounce Frames Corrected : {upper_court_balls_frames}")
+        print(f"Lower Court Bounce Frames Corrected : {lower_court_balls_frames}")    
+        
+        if SELECTED_PLAYER == 'Upper':
+            player_balls_frames = lower_court_balls_frames
+        else:
+            player_balls_frames = upper_court_balls_frames
+        
 
             
-        ball_landing_frames_stats = GT_BOUNCES_FRAMES.copy()
-        ball_shots_frames_stats = GT_RACKET_HITS_FRAMES.copy()
- 
-        # Get the racket hit frames for the player
+        
+        # If ground truth is available for this video, use it; otherwise use detected values
+        if GT_RACKET_HITS_FRAMES and GT_BOUNCES_FRAMES:
+            ball_landing_frames_stats = GT_BOUNCES_FRAMES.copy()
+            ball_shots_frames_stats = GT_RACKET_HITS_FRAMES.copy()
+        else:
+            # Use detected values when ground truth is not available
+            ball_landing_frames_stats = ball_landing_frames.copy()
+            ball_shots_frames_stats = ball_shots_frames.copy()
+    else:
+        # When not in DEBUG mode, always use detected values
+        ball_landing_frames_stats = ball_landing_frames.copy()
+        ball_shots_frames_stats = ball_shots_frames.copy()
+
+    print(f"Selected player is {SELECTED_PLAYER} so the bounce used in ball heatmap are in the opposite court and are: {player_balls_frames}")
+
+    # Get the racket hit frames for the player (only needed for probabilities or debugging)
+    if COMPUTE_PROBABILITIES or DEBUG:
         ball_shots_frames_upper, ball_shots_frames_lower = filter_ball_detections_by_player(ball_shots_frames_stats, ball_mini_court_detections, mini_court)
         print(f"Ball Shots Upper Player: {ball_shots_frames_upper}")
         print(f"Ball Shots Lower Player: {ball_shots_frames_lower}")
-        if ball_shots_frames_upper[0] < ball_shots_frames_lower[0]:
-            serve_player = 'Upper'
+        
+        ball_shots_frames_upper = GT_RACKET_HITS_FRAMES[::2]
+        ball_shots_frames_lower = GT_RACKET_HITS_FRAMES[1::2]
+        print(f"Corrected Ball Shots Upper Player: {ball_shots_frames_upper}")
+        print(f"Corrected Ball Shots Lower Player: {ball_shots_frames_lower}")
+        
+        # Check if both lists have elements before accessing them
+        if len(ball_shots_frames_upper) > 0 and len(ball_shots_frames_lower) > 0:
+            if ball_shots_frames_upper[0] < ball_shots_frames_lower[0]:
+                serve_player = 'Upper'
+            else:
+                serve_player = 'Lower'
+            print(f"The Player who serves is: {serve_player}")
         else:
-            serve_player = 'Lower'
-        print(f"The Player who serves is: {serve_player}")
+            print(f"Warning: Cannot determine serving player - Upper shots: {len(ball_shots_frames_upper)}, Lower shots: {len(ball_shots_frames_lower)}")
+            serve_player = 'Unknown'
 
         # Print the ground truth values for the racket hits and ball landings for debugging purposes
-        if len(ball_shots_frames_stats) > 0 and len(GT_BOUNCES_FRAMES) > 0:
+        if DEBUG and len(ball_shots_frames_stats) > 0 and len(GT_BOUNCES_FRAMES) > 0:
             print(f"Ground Truth Racket Hit frames : {ball_shots_frames_stats}")
             print(f"Ground Truth Bounce Frames : {GT_BOUNCES_FRAMES}")
 
@@ -290,8 +348,14 @@ def main():
     # Track player positions for calculating total distance
     player_positions_history = {1: [], 2: []}
     
+    # Ensure both lists have the same length to avoid index errors
+    min_length = min(len(ball_shots_frames_stats), len(ball_landing_frames_stats))
+    if len(ball_shots_frames_stats) != len(ball_landing_frames_stats):
+        print(f"Warning: Mismatch in lengths - ball_shots_frames_stats: {len(ball_shots_frames_stats)}, ball_landing_frames_stats: {len(ball_landing_frames_stats)}")
+        print(f"Using minimum length: {min_length}")
+    
     # Loop over all ball shots except the last one since it doesn't have an answer shot.
-    for ball_shot_ind in range(len(ball_shots_frames_stats)):
+    for ball_shot_ind in range(min_length):
         start_frame = ball_shots_frames_stats[ball_shot_ind]               # Starting frame of the ball shot
         end_frame = ball_landing_frames_stats[ball_shot_ind]               # Ending frame of the ball shot
         ball_shot_time_in_seconds = (end_frame - start_frame) / fps        # Time taken by the ball to travel from the player to the opponent
@@ -357,14 +421,16 @@ def main():
         # Player who shot the ball stats
         current_player_stats[f'player_{player_shot_ball}_number_of_shots'] += 1
         
-        if start_frame in ball_shots_frames_upper:
-            # This shot was made by the upper player
-            upper_player_id = player_position_to_id.get('Upper')
-            current_player_stats[f'player_{upper_player_id}_hits_counter'] += 1
-        elif start_frame in ball_shots_frames_lower:
-            # This shot was made by the lower player
-            lower_player_id = player_position_to_id.get('Lower')
-            current_player_stats[f'player_{lower_player_id}_hits_counter'] += 1
+        # Only update hits counter if we have the upper/lower frame data
+        if COMPUTE_PROBABILITIES or DEBUG:
+            if start_frame in ball_shots_frames_upper:
+                # This shot was made by the upper player
+                upper_player_id = player_position_to_id.get('Upper')
+                current_player_stats[f'player_{upper_player_id}_hits_counter'] += 1
+            elif start_frame in ball_shots_frames_lower:
+                # This shot was made by the lower player
+                lower_player_id = player_position_to_id.get('Lower')
+                current_player_stats[f'player_{lower_player_id}_hits_counter'] += 1
             
         current_player_stats[f'player_{player_shot_ball}_total_shot_speed'] += speed_of_ball_shot
         current_player_stats[f'player_{player_shot_ball}_last_shot_speed'] = speed_of_ball_shot
@@ -429,20 +495,24 @@ def main():
     if DRAW_MINI_COURT:
         # Draw the mini court on the video frames
         output_frames = mini_court.draw_mini_court(output_frames)
-   
-        # Draw the heatmaps on the mini court
-        _, ball_landing_heatmaps = mini_court.draw_ball_landing_heatmap(output_frames, player_balls_frames, ball_mini_court_detections, ball_shots_frames_upper, ball_shots_frames_lower, selected_player=SELECTED_PLAYER)
-        _, player_distance_heatmaps = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections, selected_player=SELECTED_PLAYER)
-        
-        # Compute score prediction and probability for each ball shot
-        output_frames = mini_court.draw_score_heatmap(output_frames, ball_landing_heatmaps, player_distance_heatmaps)
 
-        # Draw the trajectories of the ball on the mini court
-        output_frames = mini_court.draw_shot_trajectories(output_frames, player_mini_court_detections, ball_mini_court_detections, ball_landing_frames_stats, ball_shots_frames_stats, serve_player=serve_player)     
+        if COMPUTE_PROBABILITIES:
+            # Draw the heatmaps on the mini court
+            _, ball_landing_heatmaps = mini_court.draw_ball_landing_heatmap(output_frames, player_balls_frames, ball_mini_court_detections, ball_shots_frames_upper, ball_shots_frames_lower, selected_player=SELECTED_PLAYER)
+            _, player_distance_heatmaps = mini_court.draw_player_distance_heatmap(output_frames, player_mini_court_detections, selected_player=SELECTED_PLAYER)
+            
+            # Compute score prediction and probability for each ball shot
+            
+            output_frames = mini_court.draw_score_heatmap(output_frames, ball_landing_heatmaps, player_distance_heatmaps)
+
+            # Draw the trajectories of the ball on the mini court
+            output_frames = mini_court.draw_shot_trajectories(output_frames, player_mini_court_detections, ball_mini_court_detections, ball_landing_frames_stats, ball_shots_frames_stats, serve_player=serve_player)     
+        else:
+            # Draw the ball positions on the mini court
+            output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, object_type='ball')
 
         # Draw the player positions on the mini court
-        output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections,object_type='player')
-        #output_frames = mini_court.draw_points_on_mini_court(output_frames, ball_mini_court_detections, object_type='ball')
+        output_frames = mini_court.draw_points_on_mini_court(output_frames, player_mini_court_detections, object_type='player')
 
     # Draw player stats box
     if DRAW_STATS_BOX:
@@ -451,12 +521,13 @@ def main():
                                             player_mapping=player_position_to_id)
 
     # Draw Frames Number, Racket Hits and Ball Landings for debugging purposes
+    
     if DEBUG:
         output_frames = draw_debug_window(output_frames)
         output_frames = draw_frames_number(output_frames)
         output_frames = draw_racket_hits(output_frames, ball_shots_frames_stats)
         output_frames = draw_ball_landings(output_frames, ball_landing_frames, GT_BOUNCES_FRAMES, ball_detections_tracknet)
-
+    
     # Save video
     save_video(output_frames, OUTPUT_VIDEO_PATH, fps)
     print(f"Output video saved to: {OUTPUT_VIDEO_PATH}")

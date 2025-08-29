@@ -22,7 +22,7 @@ class CourtLineDetector:
         # Load the trained courtline keypoints detection model
         self.model = models.resnet50(pretrained=False)
         self.model.fc = torch.nn.Linear(self.model.fc.in_features, 14*2)
-        self.model.load_state_dict(torch.load(model_path, map_location=self.machine))
+        self.model.load_state_dict(torch.load(model_path, map_location=self.machine, weights_only=False))
         self.model.eval()
         
         # Transformations for input frames

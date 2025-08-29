@@ -697,9 +697,6 @@ class MiniCourt():
         max_distance = np.sqrt(court_width**2 + court_height**2)
         
         for frame_num, frame in enumerate(frames):
-            # Create a copy of the frame
-            heatmap_frame = frame.copy()
-            
             # Get player positions for this frame
             player_positions = player_mini_court_detections[frame_num]
             
@@ -742,16 +739,17 @@ class MiniCourt():
             # Apply the colormap to the final heatmap
             colored_heatmap = cv2.applyColorMap(player_img, color_map)
             
-            # Create a temporary frame with the heatmap region
-            overlay = heatmap_frame.copy()
+            # Modify the frame directly to avoid creating unnecessary copies
+            # Create a mask for blending only in the court region
+            court_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            court_mask[court_y_start:court_y_end, court_left_x:court_right_x] = 255
             
-            # Place the colored_heatmap onto the selected court region
-            overlay[court_y_start:court_y_end, court_left_x:court_right_x] = colored_heatmap
+            # Apply the heatmap overlay only to the court region
+            frame_court_region = frame[court_y_start:court_y_end, court_left_x:court_right_x].copy()
+            blended_region = cv2.addWeighted(colored_heatmap, alpha, frame_court_region, 1-alpha, 0)
+            frame[court_y_start:court_y_end, court_left_x:court_right_x] = blended_region
             
-            # Blend the overlay with the original frame
-            cv2.addWeighted(overlay, alpha, heatmap_frame, 1-alpha, 0, heatmap_frame)
-            
-            output_frames.append(heatmap_frame)
+            output_frames.append(frame)
         
         return output_frames, player_distance_heatmaps
     
